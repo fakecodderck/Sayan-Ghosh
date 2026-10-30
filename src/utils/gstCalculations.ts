@@ -27,7 +27,8 @@ export function calculateLineItem(
   discountPercent: number,
   gstRate: number,
   isInterState: boolean,
-  isGstBill: boolean = true
+  isGstBill: boolean = true,
+  isGstInclusive: boolean = false
 ): {
   taxableAmount: number;
   cgst: number;
@@ -37,26 +38,45 @@ export function calculateLineItem(
 } {
   const gross = qty * rate;
   const discountAmount = (gross * (discountPercent || 0)) / 100;
-  const taxableAmount = Math.max(0, gross - discountAmount);
+  const netRateTotal = Math.max(0, gross - discountAmount);
 
+  let taxableAmount = 0;
   let cgst = 0;
   let sgst = 0;
   let igst = 0;
+  let total = 0;
 
   if (isGstBill) {
-    if (isInterState) {
-      igst = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+    if (isGstInclusive && gstRate > 0) {
+      total = Number(netRateTotal.toFixed(2));
+      taxableAmount = Number((total / (1 + gstRate / 100)).toFixed(2));
+      const totalTax = Number((total - taxableAmount).toFixed(2));
+
+      if (isInterState) {
+        igst = totalTax;
+      } else {
+        const halfTax = Number((totalTax / 2).toFixed(2));
+        cgst = halfTax;
+        sgst = Number((totalTax - halfTax).toFixed(2));
+      }
     } else {
-      const halfRate = gstRate / 2;
-      cgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
-      sgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+      taxableAmount = Number(netRateTotal.toFixed(2));
+      if (isInterState) {
+        igst = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+      } else {
+        const halfRate = gstRate / 2;
+        cgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+        sgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+      }
+      total = Number((taxableAmount + cgst + sgst + igst).toFixed(2));
     }
+  } else {
+    taxableAmount = Number(netRateTotal.toFixed(2));
+    total = taxableAmount;
   }
 
-  const total = Number((taxableAmount + cgst + sgst + igst).toFixed(2));
-
   return {
-    taxableAmount: Number(taxableAmount.toFixed(2)),
+    taxableAmount,
     cgst,
     sgst,
     igst,
@@ -253,14 +273,23 @@ export function computeProfitAndLoss(
 export interface Gstr1Summary {
   b2bInvoicesCount: number;
   b2bTaxableValue: number;
+  b2bCgst: number;
+  b2bSgst: number;
+  b2bIgst: number;
   b2bTaxAmount: number;
 
   b2cInvoicesCount: number;
   b2cTaxableValue: number;
+  b2cCgst: number;
+  b2cSgst: number;
+  b2cIgst: number;
   b2cTaxAmount: number;
 
   creditNotesCount: number;
   creditNotesTaxableValue: number;
+  creditNotesCgst: number;
+  creditNotesSgst: number;
+  creditNotesIgst: number;
   creditNotesTaxAmount: number;
 
   totalTaxable: number;
@@ -289,19 +318,21 @@ export function computeGSTR1Summary(
 ): Gstr1Summary {
   let b2bInvoicesCount = 0;
   let b2bTaxableValue = 0;
-  let b2bTaxAmount = 0;
+  let b2bCgst = 0;
+  let b2bSgst = 0;
+  let b2bIgst = 0;
 
   let b2cInvoicesCount = 0;
   let b2cTaxableValue = 0;
-  let b2cTaxAmount = 0;
+  let b2cCgst = 0;
+  let b2cSgst = 0;
+  let b2cIgst = 0;
 
   let creditNotesCount = 0;
   let creditNotesTaxableValue = 0;
-  let creditNotesTaxAmount = 0;
-
-  let totalCgst = 0;
-  let totalSgst = 0;
-  let totalIgst = 0;
+  let creditNotesCgst = 0;
+  let creditNotesSgst = 0;
+  let creditNotesIgst = 0;
 
   const hsnMap: Record<
     string,
@@ -322,25 +353,24 @@ export function computeGSTR1Summary(
     if (v.type === 'SALE') {
       const party = ledgers.find(l => l.id === v.partyId);
       const isB2B = Boolean(party?.gstin && party.gstin.trim().length === 15);
-      const taxSum = v.cgstTotal + v.sgstTotal + v.igstTotal;
 
       if (isB2B) {
         b2bInvoicesCount++;
         b2bTaxableValue += v.subtotal;
-        b2bTaxAmount += taxSum;
+        b2bCgst += v.cgstTotal;
+        b2bSgst += v.sgstTotal;
+        b2bIgst += v.igstTotal;
       } else {
         b2cInvoicesCount++;
         b2cTaxableValue += v.subtotal;
-        b2cTaxAmount += taxSum;
+        b2cCgst += v.cgstTotal;
+        b2cSgst += v.sgstTotal;
+        b2cIgst += v.igstTotal;
       }
 
-      totalCgst += v.cgstTotal;
-      totalSgst += v.sgstTotal;
-      totalIgst += v.igstTotal;
-
-      // HSN aggregation
+      // HSN aggregation for sales
       for (const item of v.items || []) {
-        const key = `${item.hsn}_${item.gstRate}`;
+        const key = `${item.hsn || '9999'}_${item.gstRate}`;
         if (!hsnMap[key]) {
           hsnMap[key] = {
             hsn: item.hsn || '9999',
@@ -363,34 +393,162 @@ export function computeGSTR1Summary(
     } else if (v.type === 'CREDIT_NOTE') {
       creditNotesCount++;
       creditNotesTaxableValue += v.subtotal;
-      creditNotesTaxAmount += v.cgstTotal + v.sgstTotal + v.igstTotal;
+      creditNotesCgst += v.cgstTotal;
+      creditNotesSgst += v.sgstTotal;
+      creditNotesIgst += v.igstTotal;
+
+      // HSN reduction for sales returns (Credit Notes)
+      for (const item of v.items || []) {
+        const key = `${item.hsn || '9999'}_${item.gstRate}`;
+        if (hsnMap[key]) {
+          hsnMap[key].totalQty -= item.qty;
+          hsnMap[key].taxableValue -= item.taxableAmount;
+          hsnMap[key].cgst -= item.cgst;
+          hsnMap[key].sgst -= item.sgst;
+          hsnMap[key].igst -= item.igst;
+        }
+      }
     }
   }
 
-  const hsnSummary = Object.values(hsnMap).map(h => ({
-    ...h,
-    totalTax: Number((h.cgst + h.sgst + h.igst).toFixed(2)),
-    taxableValue: Number(h.taxableValue.toFixed(2)),
-  }));
+  const hsnSummary = Object.values(hsnMap)
+    .map(h => {
+      const taxableValue = Number(Math.max(0, h.taxableValue).toFixed(2));
+      const cgst = Number(Math.max(0, h.cgst).toFixed(2));
+      const sgst = Number(Math.max(0, h.sgst).toFixed(2));
+      const igst = Number(Math.max(0, h.igst).toFixed(2));
+      const totalTax = Number((cgst + sgst + igst).toFixed(2));
+      return {
+        ...h,
+        totalQty: Math.max(0, h.totalQty),
+        taxableValue,
+        cgst,
+        sgst,
+        igst,
+        totalTax,
+      };
+    })
+    .filter(h => h.totalQty > 0 || h.taxableValue > 0 || h.totalTax > 0);
 
-  const totalTaxable = b2bTaxableValue + b2cTaxableValue - creditNotesTaxableValue;
-  const totalTax = totalCgst + totalSgst + totalIgst - creditNotesTaxAmount;
+  const totalCgst = Number(Math.max(0, b2bCgst + b2cCgst - creditNotesCgst).toFixed(2));
+  const totalSgst = Number(Math.max(0, b2bSgst + b2cSgst - creditNotesSgst).toFixed(2));
+  const totalIgst = Number(Math.max(0, b2bIgst + b2cIgst - creditNotesIgst).toFixed(2));
+
+  const totalTaxable = Number(Math.max(0, b2bTaxableValue + b2cTaxableValue - creditNotesTaxableValue).toFixed(2));
+  const totalTax = Number((totalCgst + totalSgst + totalIgst).toFixed(2));
+
+  const b2bTaxAmount = Number((b2bCgst + b2bSgst + b2bIgst).toFixed(2));
+  const b2cTaxAmount = Number((b2cCgst + b2cSgst + b2cIgst).toFixed(2));
+  const creditNotesTaxAmount = Number((creditNotesCgst + creditNotesSgst + creditNotesIgst).toFixed(2));
 
   return {
     b2bInvoicesCount,
     b2bTaxableValue: Number(b2bTaxableValue.toFixed(2)),
-    b2bTaxAmount: Number(b2bTaxAmount.toFixed(2)),
+    b2bCgst: Number(b2bCgst.toFixed(2)),
+    b2bSgst: Number(b2bSgst.toFixed(2)),
+    b2bIgst: Number(b2bIgst.toFixed(2)),
+    b2bTaxAmount,
+
     b2cInvoicesCount,
     b2cTaxableValue: Number(b2cTaxableValue.toFixed(2)),
-    b2cTaxAmount: Number(b2cTaxAmount.toFixed(2)),
+    b2cCgst: Number(b2cCgst.toFixed(2)),
+    b2cSgst: Number(b2cSgst.toFixed(2)),
+    b2cIgst: Number(b2cIgst.toFixed(2)),
+    b2cTaxAmount,
+
     creditNotesCount,
     creditNotesTaxableValue: Number(creditNotesTaxableValue.toFixed(2)),
-    creditNotesTaxAmount: Number(creditNotesTaxAmount.toFixed(2)),
-    totalTaxable: Number(totalTaxable.toFixed(2)),
-    totalCgst: Number(totalCgst.toFixed(2)),
-    totalSgst: Number(totalSgst.toFixed(2)),
-    totalIgst: Number(totalIgst.toFixed(2)),
-    totalTax: Number(totalTax.toFixed(2)),
+    creditNotesCgst: Number(creditNotesCgst.toFixed(2)),
+    creditNotesSgst: Number(creditNotesSgst.toFixed(2)),
+    creditNotesIgst: Number(creditNotesIgst.toFixed(2)),
+    creditNotesTaxAmount,
+
+    totalTaxable,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+    totalTax,
     hsnSummary,
   };
 }
+
+export interface Gstr3bSummary {
+  outwardTaxableValue: number;
+  outwardCgst: number;
+  outwardSgst: number;
+  outwardIgst: number;
+  outwardTotalTax: number;
+
+  itcTaxableValue: number;
+  itcCgst: number;
+  itcSgst: number;
+  itcIgst: number;
+  totalItc: number;
+
+  netCgstPayable: number;
+  netSgstPayable: number;
+  netIgstPayable: number;
+  netTotalPayable: number;
+}
+
+export function computeGSTR3BSummary(
+  vouchers: TransactionVoucher[],
+  ledgers: LedgerAccount[]
+): Gstr3bSummary {
+  const gstr1 = computeGSTR1Summary(vouchers, ledgers);
+
+  let purchaseTaxable = 0;
+  let purchaseCgst = 0;
+  let purchaseSgst = 0;
+  let purchaseIgst = 0;
+
+  let debitNoteTaxable = 0;
+  let debitNoteCgst = 0;
+  let debitNoteSgst = 0;
+  let debitNoteIgst = 0;
+
+  for (const v of vouchers) {
+    if (v.type === 'PURCHASE') {
+      purchaseTaxable += v.subtotal;
+      purchaseCgst += v.cgstTotal;
+      purchaseSgst += v.sgstTotal;
+      purchaseIgst += v.igstTotal;
+    } else if (v.type === 'DEBIT_NOTE') {
+      debitNoteTaxable += v.subtotal;
+      debitNoteCgst += v.cgstTotal;
+      debitNoteSgst += v.sgstTotal;
+      debitNoteIgst += v.igstTotal;
+    }
+  }
+
+  const itcTaxableValue = Number(Math.max(0, purchaseTaxable - debitNoteTaxable).toFixed(2));
+  const itcCgst = Number(Math.max(0, purchaseCgst - debitNoteCgst).toFixed(2));
+  const itcSgst = Number(Math.max(0, purchaseSgst - debitNoteSgst).toFixed(2));
+  const itcIgst = Number(Math.max(0, purchaseIgst - debitNoteIgst).toFixed(2));
+  const totalItc = Number((itcCgst + itcSgst + itcIgst).toFixed(2));
+
+  const netCgstPayable = Number(Math.max(0, gstr1.totalCgst - itcCgst).toFixed(2));
+  const netSgstPayable = Number(Math.max(0, gstr1.totalSgst - itcSgst).toFixed(2));
+  const netIgstPayable = Number(Math.max(0, gstr1.totalIgst - itcIgst).toFixed(2));
+  const netTotalPayable = Number((netCgstPayable + netSgstPayable + netIgstPayable).toFixed(2));
+
+  return {
+    outwardTaxableValue: gstr1.totalTaxable,
+    outwardCgst: gstr1.totalCgst,
+    outwardSgst: gstr1.totalSgst,
+    outwardIgst: gstr1.totalIgst,
+    outwardTotalTax: gstr1.totalTax,
+
+    itcTaxableValue,
+    itcCgst,
+    itcSgst,
+    itcIgst,
+    totalItc,
+
+    netCgstPayable,
+    netSgstPayable,
+    netIgstPayable,
+    netTotalPayable,
+  };
+}
+

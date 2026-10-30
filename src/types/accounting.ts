@@ -77,6 +77,7 @@ export interface VoucherLineItem {
   sgst: number;
   igst: number;
   total: number;
+  isGstInclusive?: boolean;
 }
 
 export interface JournalLineItem {
@@ -97,6 +98,7 @@ export interface TransactionVoucher {
   partyId?: string; // Links to Customer or Company (LedgerAccount)
   partyName?: string;
   isGstBill: boolean; // true = with GST, false = without GST (Non-GST / Bill of Supply)
+  isGstInclusive?: boolean; // true = entered unit rates are inclusive of GST
   paymentMode: PaymentMode;
   referenceNo?: string; // Cheque / UTR / Transaction ID
   subtotal: number;

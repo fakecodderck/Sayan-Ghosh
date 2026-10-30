@@ -26,6 +26,7 @@ export type ActiveModule =
   | 'dashboard'
   | 'daybook'
   | 'ledgers'
+  | 'all_invoices'
   | 'purchases'
   | 'sales'
   | 'inventory'
@@ -64,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>(() => {
     return {
       'OVERVIEW': activeModule === 'dashboard',
-      'CORE REGISTERS': ['daybook', 'ledgers', 'inventory'].includes(activeModule),
+      'CORE REGISTERS': ['daybook', 'ledgers', 'inventory', 'all_invoices'].includes(activeModule),
       'COMMERCIAL TRANSACTIONS': ['sales', 'purchases', 'payments', 'credit_debit'].includes(activeModule),
       'PARTY DIRECTORIES': ['customers', 'companies'].includes(activeModule),
       'BILLING & STATEMENTS': ['gst_bill', 'gstr_reports', 'profit_loss', 'settings'].includes(activeModule),
@@ -91,6 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       sectionTitle: 'CORE REGISTERS',
       items: [
+        { id: 'all_invoices', label: 'All Invoices Register', icon: FileCheck2 },
         { id: 'daybook', label: 'Day Book (Journal)', icon: BookOpen },
         { id: 'ledgers', label: 'Ledger Master Accounts', icon: BarChart3 },
         { id: 'inventory', label: 'Stock & Inventory Catalog', icon: Boxes, badge: lowStockCount > 0 ? lowStockCount : undefined },

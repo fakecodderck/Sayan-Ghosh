@@ -5,6 +5,7 @@ import { Sidebar, ActiveModule } from './components/Sidebar';
 import { DashboardView } from './views/DashboardView';
 import { DayBookView } from './views/DayBookView';
 import { LedgersView } from './views/LedgersView';
+import { InvoicesRegisterView } from './views/InvoicesRegisterView';
 import { PurchasesView } from './views/PurchasesView';
 import { SalesView } from './views/SalesView';
 import { InventoryView } from './views/InventoryView';
@@ -120,6 +121,14 @@ function MainApp() {
           )}
 
           {activeModule === 'ledgers' && <LedgersView />}
+
+          {activeModule === 'all_invoices' && (
+            <InvoicesRegisterView
+              onSelectVoucherForPrint={handleOpenPrint}
+              onOpenNewSale={() => handleOpenNewSale()}
+              onOpenNewPurchase={() => handleOpenNewPurchase()}
+            />
+          )}
 
           {activeModule === 'purchases' && (
             <PurchasesView

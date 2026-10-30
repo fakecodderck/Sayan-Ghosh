@@ -9,7 +9,7 @@ import {
   Building
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { computeGSTR1Summary, formatINR } from '../utils/gstCalculations';
+import { computeGSTR1Summary, computeGSTR3BSummary, formatINR } from '../utils/gstCalculations';
 
 export const GSTRReportsView: React.FC = () => {
   const { vouchers, ledgers, settings } = useAccounting();
@@ -20,18 +20,20 @@ export const GSTRReportsView: React.FC = () => {
     return computeGSTR1Summary(vouchers, ledgers);
   }, [vouchers, ledgers]);
 
-  // Purchases for GSTR-3B ITC (Input Tax Credit)
-  const purchases = vouchers.filter(v => v.type === 'PURCHASE');
-  const itcCgst = purchases.reduce((acc, v) => acc + v.cgstTotal, 0);
-  const itcSgst = purchases.reduce((acc, v) => acc + v.sgstTotal, 0);
-  const itcIgst = purchases.reduce((acc, v) => acc + v.igstTotal, 0);
-  const totalItc = itcCgst + itcSgst + itcIgst;
+  const gstr3b = useMemo(() => {
+    return computeGSTR3BSummary(vouchers, ledgers);
+  }, [vouchers, ledgers]);
 
-  // Net payable = Outward Tax - Eligible ITC
-  const netCgstPayable = Math.max(0, gstr1.totalCgst - itcCgst);
-  const netSgstPayable = Math.max(0, gstr1.totalSgst - itcSgst);
-  const netIgstPayable = Math.max(0, gstr1.totalIgst - itcIgst);
-  const netTotalPayable = netCgstPayable + netSgstPayable + netIgstPayable;
+  const {
+    itcCgst,
+    itcSgst,
+    itcIgst,
+    totalItc,
+    netCgstPayable,
+    netSgstPayable,
+    netIgstPayable,
+    netTotalPayable,
+  } = gstr3b;
 
   const downloadCSV = () => {
     let csvContent = 'data:text/csv;charset=utf-8,';

@@ -23,7 +23,7 @@ import {
 import { useAccounting } from '../context/AccountingContext';
 import { ActiveModule } from '../components/Sidebar';
 import { TransactionVoucher, VoucherType } from '../types/accounting';
-import { formatINR, computeGSTR1Summary } from '../utils/gstCalculations';
+import { formatINR, computeGSTR1Summary, computeGSTR3BSummary } from '../utils/gstCalculations';
 
 interface DashboardViewProps {
   onNavigate: (module: ActiveModule) => void;
@@ -94,11 +94,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return inventory.reduce((acc, item) => acc + (item.currentStock || 0) * (item.purchasePrice || 0), 0);
   }, [inventory]);
 
-  const gstrSummary = useMemo(() => computeGSTR1Summary(vouchers, ledgers), [vouchers, ledgers]);
-  const itcEstimate = useMemo(() => {
-    return purchaseVouchers.reduce((acc, v) => acc + (v.cgstTotal + v.sgstTotal + v.igstTotal), 0);
-  }, [purchaseVouchers]);
-  const netGstPayable = Math.max(0, gstrSummary.totalTax - itcEstimate);
+  const gstr3bSummary = useMemo(() => computeGSTR3BSummary(vouchers, ledgers), [vouchers, ledgers]);
+  const netGstPayable = gstr3bSummary.netTotalPayable;
 
   // 3. Trailing Monthly Bar Chart Data (Sales vs Purchases)
   const chartData = useMemo(() => {

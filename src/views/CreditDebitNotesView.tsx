@@ -6,7 +6,8 @@ import {
   Printer,
   FileText,
   Building,
-  HelpCircle
+  HelpCircle,
+  Trash2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
@@ -21,7 +22,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
   onSelectVoucherForPrint,
   onOpenNewVoucher,
 }) => {
-  const { vouchers } = useAccounting();
+  const { vouchers, deleteVoucher } = useAccounting();
 
   const [activeTab, setActiveTab] = useState<'CREDIT_NOTE' | 'DEBIT_NOTE'>('CREDIT_NOTE');
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,7 +154,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                 <th className="py-2.5 px-4 w-32 text-right font-bold text-slate-900 dark:text-slate-100">
                   Total Adjusted (₹)
                 </th>
-                <th className="py-2.5 px-3 w-24 text-center">Print</th>
+                <th className="py-2.5 px-3 w-32 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -195,12 +196,26 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                       {formatINR(n.grandTotal)}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => onSelectVoucherForPrint(n)}
-                        className="px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
-                      >
-                        Print
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => onSelectVoucherForPrint(n)}
+                          title="Print / View Note"
+                          className="px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
+                        >
+                          Print
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete note ${n.voucherNo}? This will reverse stock and ledger balances.`)) {
+                              deleteVoucher(n.id);
+                            }
+                          }}
+                          title="Delete Note"
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

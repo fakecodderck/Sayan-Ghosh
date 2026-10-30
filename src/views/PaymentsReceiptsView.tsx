@@ -8,7 +8,8 @@ import {
   Building,
   CreditCard,
   QrCode,
-  DollarSign
+  DollarSign,
+  Trash2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { PaymentMode, TransactionVoucher } from '../types/accounting';
@@ -23,7 +24,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
   onOpenNewVoucher,
   onSelectVoucherForPrint,
 }) => {
-  const { vouchers, ledgers } = useAccounting();
+  const { vouchers, ledgers, deleteVoucher } = useAccounting();
 
   const [filterType, setFilterType] = useState<'ALL' | 'RECEIPT' | 'PAYMENT'>('ALL');
   const [filterMode, setFilterMode] = useState<string>('ALL');
@@ -206,7 +207,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                 <th className="py-2.5 px-4 w-36 text-right font-bold text-slate-900 dark:text-slate-100">
                   Amount (₹)
                 </th>
-                <th className="py-2.5 px-3 w-24 text-center">Receipt</th>
+                <th className="py-2.5 px-3 w-32 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -257,12 +258,26 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                       {formatINR(v.grandTotal)}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => onSelectVoucherForPrint(v)}
-                        className="px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
-                      >
-                        Slip
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => onSelectVoucherForPrint(v)}
+                          title="Print Receipt Slip"
+                          className="px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
+                        >
+                          Slip
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete voucher ${v.voucherNo}? This will restore ledger balances.`)) {
+                              deleteVoucher(v.id);
+                            }
+                          }}
+                          title="Delete Voucher"
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

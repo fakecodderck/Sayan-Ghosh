@@ -44,6 +44,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
 
   const [type, setType] = useState<VoucherType>(initialType);
   const [isGstBill, setIsGstBill] = useState<boolean>(initialIsGstBill);
+  const [isGstInclusive, setIsGstInclusive] = useState<boolean>(false);
   const [voucherNo, setVoucherNo] = useState<string>(() => {
     const prefix = type === 'SALE' ? (initialIsGstBill ? 'INV' : 'BOS') : type === 'PURCHASE' ? 'BILL' : type === 'PAYMENT' ? 'PMT' : type === 'RECEIPT' ? 'REC' : type === 'CREDIT_NOTE' ? 'CN' : 'DN';
     return `${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
@@ -104,6 +105,32 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
           Number(it.discount) || 0,
           Number(it.gstRate) || 0,
           isInterState,
+          val,
+          isGstInclusive
+        );
+        return {
+          ...it,
+          taxableAmount: calc.taxableAmount,
+          cgst: calc.cgst,
+          sgst: calc.sgst,
+          igst: calc.igst,
+          total: calc.total,
+        };
+      })
+    );
+  };
+
+  const handleToggleGstInclusive = (val: boolean) => {
+    setIsGstInclusive(val);
+    setItems(prev =>
+      prev.map(it => {
+        const calc = calculateLineItem(
+          Number(it.qty) || 0,
+          Number(it.rate) || 0,
+          Number(it.discount) || 0,
+          Number(it.gstRate) || 0,
+          isInterState,
+          isGstBill,
           val
         );
         return {
@@ -139,7 +166,8 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       Number(current.discount) || 0,
       Number(current.gstRate) || 0,
       isInterState,
-      isGstBill
+      isGstBill,
+      isGstInclusive
     );
 
     current.taxableAmount = calc.taxableAmount;
@@ -163,7 +191,8 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       0,
       defaultGst,
       isInterState,
-      isGstBill
+      isGstBill,
+      isGstInclusive
     );
 
     setItems(prev => [
@@ -237,6 +266,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       partyId: partyId || undefined,
       partyName: selectedParty?.name || undefined,
       isGstBill: isGoodsTransaction ? isGstBill : false,
+      isGstInclusive: isGoodsTransaction ? isGstInclusive : false,
       paymentMode,
       referenceNo: referenceNo || undefined,
       subtotal,
@@ -327,41 +357,82 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
             </div>
           </div>
 
-          {/* GST vs Non-GST Toggle (Explicitly required for Sales & Purchases) */}
+          {/* GST vs Non-GST Toggle & Rate Mode Toggle */}
           {isGoodsTransaction && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700/80">
-              <div>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  Tax Billing Type:
-                </span>
-                <span className="text-[11px] text-slate-500 ml-1.5">
-                  {isGstBill ? 'Standard GST Tax Invoice (with CGST/SGST/IGST breakdown)' : 'Bill of Supply / Non-GST Sale (0% Tax)'}
-                </span>
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    Tax Billing Type:
+                  </span>
+                  <span className="text-[11px] text-slate-500 ml-1.5">
+                    {isGstBill ? 'Standard GST Tax Invoice (with CGST/SGST/IGST breakdown)' : 'Bill of Supply / Non-GST Sale (0% Tax)'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleGstBill(true)}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      isGstBill
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    ✓ With GST (Tax Invoice)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleGstBill(false)}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      !isGstBill
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Without GST (Non-GST)
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => handleToggleGstBill(true)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    isGstBill
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  ✓ With GST (Tax Invoice)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleGstBill(false)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    !isGstBill
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  Without GST (Non-GST)
-                </button>
-              </div>
+
+              {isGstBill && (
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      Item Rate Mode:
+                    </span>
+                    <span className="text-[11px] text-slate-500 ml-1.5">
+                      {isGstInclusive
+                        ? 'Input rates are Inclusive of GST (Taxable amount & tax extracted automatically)'
+                        : 'Input rates are Exclusive of GST (GST added on top of item rate)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGstInclusive(false)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        !isGstInclusive
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      Rate Excl. GST
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGstInclusive(true)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        isGstInclusive
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      Rate Incl. GST
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -451,7 +522,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
                       <th className="py-2 px-3">Item Name</th>
                       <th className="py-2 px-2 w-20">HSN</th>
                       <th className="py-2 px-2 w-20">Qty</th>
-                      <th className="py-2 px-2 w-24">Rate (₹)</th>
+                      <th className="py-2 px-2 w-28">Rate (₹ {isGstInclusive ? 'Incl.' : 'Excl.'})</th>
                       <th className="py-2 px-2 w-16">Disc %</th>
                       <th className="py-2 px-2 w-20">GST %</th>
                       <th className="py-2 px-3 w-24 text-right">Taxable</th>

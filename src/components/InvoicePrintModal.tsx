@@ -262,7 +262,9 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                         <th className="py-1.5 px-2 border-r border-slate-200">Item Description</th>
                         <th className="py-1.5 px-2 w-14 text-center border-r border-slate-200">HSN</th>
                         <th className="py-1.5 px-2 w-12 text-right border-r border-slate-200">Qty</th>
-                        <th className="py-1.5 px-2 w-14 text-right border-r border-slate-200">Rate</th>
+                        <th className="py-1.5 px-2 w-16 text-right border-r border-slate-200">
+                          {voucher.isGstInclusive ? 'Rate (Incl)' : 'Rate'}
+                        </th>
                         <th className="py-1.5 px-2 w-16 text-right border-r border-slate-200">Taxable</th>
                         <th className="py-1.5 px-2 w-10 text-center border-r border-slate-200">GST</th>
                         <th className="py-1.5 px-2 w-18 text-right">Total (₹)</th>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileCheck2,
   Printer,
@@ -8,7 +8,10 @@ import {
   Check,
   Eye,
   FileText,
-  RotateCw
+  RotateCw,
+  Search,
+  CheckCircle2,
+  Filter
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
@@ -23,22 +26,54 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
 }) => {
   const { vouchers, settings, updateSettings, getLedgerById } = useAccounting();
 
-  // Find all sales invoices
-  const salesInvoices = vouchers.filter(v => v.type === 'SALE');
+  // Filter all goods invoices (Sales, Purchases, Credit/Debit Notes)
+  const allInvoices = useMemo(() => {
+    return vouchers.filter(v => ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(v.type));
+  }, [vouchers]);
+
+  const [docTypeFilter, setDocTypeFilter] = useState<'SALE' | 'PURCHASE' | 'ALL'>('SALE');
+  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+
+  // Invoices matching current filter
+  const filteredInvoiceList = useMemo(() => {
+    return allInvoices.filter(v => {
+      if (docTypeFilter === 'SALE' && v.type !== 'SALE') return false;
+      if (docTypeFilter === 'PURCHASE' && v.type !== 'PURCHASE') return false;
+
+      if (invoiceSearchQuery.trim()) {
+        const query = invoiceSearchQuery.toLowerCase().trim();
+        const party = v.partyId ? getLedgerById(v.partyId) : undefined;
+        const partyName = (v.partyName || party?.name || '').toLowerCase();
+        const voucherNo = (v.voucherNo || '').toLowerCase();
+        return voucherNo.includes(query) || partyName.includes(query);
+      }
+      return true;
+    });
+  }, [allInvoices, docTypeFilter, invoiceSearchQuery, getLedgerById]);
+
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(
-    salesInvoices[0]?.id || ''
+    filteredInvoiceList[0]?.id || allInvoices[0]?.id || ''
   );
+
+  // Active selected invoice object
+  const currentInvoice = useMemo(() => {
+    return vouchers.find(v => v.id === selectedInvoiceId) || filteredInvoiceList[0] || allInvoices[0];
+  }, [vouchers, selectedInvoiceId, filteredInvoiceList, allInvoices]);
+
+  const party = currentInvoice?.partyId ? getLedgerById(currentInvoice.partyId) : undefined;
 
   // Live customizable invoice options
   const [paperSize, setPaperSize] = useState<'A5' | 'A4'>('A5');
   const [showQrCode, setShowQrCode] = useState(true);
   const [showBankDetails, setShowBankDetails] = useState(true);
   const [showHsnSummary, setShowHsnSummary] = useState(true);
-  const [customHeaderTitle, setCustomHeaderTitle] = useState('TAX INVOICE');
+  const [customHeaderTitle, setCustomHeaderTitle] = useState(() => {
+    if (currentInvoice?.type === 'PURCHASE') return 'PURCHASE INWARD VOUCHER';
+    if (currentInvoice?.type === 'CREDIT_NOTE') return 'CREDIT NOTE';
+    if (currentInvoice?.type === 'DEBIT_NOTE') return 'DEBIT NOTE';
+    return 'TAX INVOICE';
+  });
   const [isSavedSettings, setIsSavedSettings] = useState(false);
-
-  const currentInvoice = vouchers.find(v => v.id === selectedInvoiceId) || salesInvoices[0];
-  const party = currentInvoice?.partyId ? getLedgerById(currentInvoice.partyId) : undefined;
 
   // Group items by HSN
   const hsnBreakup: Record<
@@ -95,10 +130,10 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileCheck2 className="w-5 h-5 text-blue-600" />
-            <span>GST Bill &amp; Tax Invoice Station</span>
+            <span>GST Bill &amp; Invoice Customization Station</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Generate customer invoices with or without GST, and print in standard A5 portrait or A4 layouts
+            Select, customize, and print/download any generated Sales Invoice or Purchase Bill
           </p>
         </div>
 
@@ -123,32 +158,127 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
         </div>
       </div>
 
-      {/* Grid: Left Column Controls (4 cols) & Right Column Live Printable A5 Sheet (8 cols) */}
+      {/* Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Customization Controls */}
+        {/* Left Column Controls */}
         <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 text-xs">
+          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 text-xs">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Sliders className="w-4 h-4 text-blue-600" />
-              <span>Bill Customization Options</span>
+              <span>Invoice Selection &amp; Customization</span>
             </h3>
 
-            {/* Select Active Invoice */}
-            <div>
-              <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                Select Invoice to Render
+            {/* Invoice Category Selector Tabs */}
+            <div className="space-y-2">
+              <label className="block font-medium text-slate-600 dark:text-slate-400">
+                Select Invoice Document
               </label>
-              <select
-                value={selectedInvoiceId}
-                onChange={e => setSelectedInvoiceId(e.target.value)}
-                className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono"
-              >
-                {salesInvoices.map(inv => (
-                  <option key={inv.id} value={inv.id}>
-                    {inv.voucherNo} · {inv.partyName || 'Cash'} · {formatINR(inv.grandTotal)}
-                  </option>
-                ))}
-              </select>
+
+              {/* Type Filter Buttons */}
+              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setDocTypeFilter('SALE')}
+                  className={`flex-1 py-1 px-2 rounded-md transition-all ${
+                    docTypeFilter === 'SALE'
+                      ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Sales ({allInvoices.filter(v => v.type === 'SALE').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocTypeFilter('PURCHASE')}
+                  className={`flex-1 py-1 px-2 rounded-md transition-all ${
+                    docTypeFilter === 'PURCHASE'
+                      ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Purchases ({allInvoices.filter(v => v.type === 'PURCHASE').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocTypeFilter('ALL')}
+                  className={`flex-1 py-1 px-2 rounded-md transition-all ${
+                    docTypeFilter === 'ALL'
+                      ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  All ({allInvoices.length})
+                </button>
+              </div>
+
+              {/* Filter Search Input */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Quick search invoice no or party..."
+                  value={invoiceSearchQuery}
+                  onChange={e => setInvoiceSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]"
+                />
+              </div>
+
+              {/* Visual Invoice List Selector (Non-overflowing smooth list) */}
+              <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-100 dark:divide-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                {filteredInvoiceList.length === 0 ? (
+                  <div className="p-3 text-center text-slate-400 text-[11px]">
+                    No invoices matching query.
+                  </div>
+                ) : (
+                  filteredInvoiceList.map(inv => {
+                    const isSelected = inv.id === currentInvoice?.id;
+                    return (
+                      <button
+                        key={inv.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedInvoiceId(inv.id);
+                          if (inv.type === 'PURCHASE') setCustomHeaderTitle('PURCHASE INWARD VOUCHER');
+                          else if (inv.type === 'CREDIT_NOTE') setCustomHeaderTitle('CREDIT NOTE');
+                          else if (inv.type === 'DEBIT_NOTE') setCustomHeaderTitle('DEBIT NOTE');
+                          else setCustomHeaderTitle('TAX INVOICE');
+                        }}
+                        className={`w-full p-2 text-left transition-all flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-950/60 border-l-4 border-blue-600 font-bold'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                              {inv.voucherNo}
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              inv.type === 'SALE'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                            }`}>
+                              {inv.type === 'SALE' ? 'Sale' : inv.type === 'PURCHASE' ? 'Pur' : 'Note'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {inv.partyName || 'Cash Party'} · {inv.date}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono font-bold text-slate-900 dark:text-slate-100 text-[11px]">
+                            {formatINR(inv.grandTotal)}
+                          </p>
+                          {isSelected && (
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse mt-1" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* Paper Dimension Toggle */}
@@ -167,7 +297,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   }`}
                 >
                   <p className="text-xs">A5 Portrait</p>
-                  <p className="text-[10px] text-slate-400 font-mono">148 × 210 mm (Compact)</p>
+                  <p className="text-[10px] text-slate-400 font-mono">148 × 210 mm</p>
                 </button>
 
                 <button
@@ -180,7 +310,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   }`}
                 >
                   <p className="text-xs">A4 Standard</p>
-                  <p className="text-[10px] text-slate-400 font-mono">210 × 297 mm (Full)</p>
+                  <p className="text-[10px] text-slate-400 font-mono">210 × 297 mm</p>
                 </button>
               </div>
             </div>
@@ -258,19 +388,17 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Live Printable Sheet Simulation */}
-        <div className="lg:col-span-8 bg-slate-200 dark:bg-slate-950 p-6 rounded-xl flex justify-center overflow-x-auto shadow-inner">
+        {/* Right Column: Live Printable Sheet Viewport (Responsive auto-fit) */}
+        <div className="lg:col-span-8 bg-slate-200 dark:bg-slate-950 p-3 sm:p-6 rounded-xl flex justify-center overflow-x-auto shadow-inner w-full max-w-full">
           {currentInvoice ? (
             <div
-              className={`print-only-container bg-white text-slate-900 p-6 shadow-xl border border-slate-400 font-sans text-xs leading-relaxed transition-all ${
-                paperSize === 'A5' ? 'w-[560px] min-h-[780px]' : 'w-[680px] min-h-[920px]'
-              }`}
+              className="print-only-container bg-white text-slate-900 p-4 sm:p-6 shadow-xl border border-slate-300 font-sans text-xs leading-relaxed transition-all w-full max-w-[650px] min-h-[700px]"
             >
               {/* Top Banner */}
               <div className="border-b-2 border-slate-900 pb-3 mb-3">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                   <div className="max-w-[65%]">
-                    <h1 className="text-base font-bold uppercase tracking-tight text-slate-950">
+                    <h1 className="text-sm sm:text-base font-bold uppercase tracking-tight text-slate-950">
                       {settings.name}
                     </h1>
                     <p className="text-[10px] text-slate-600 leading-tight mt-0.5">
@@ -283,12 +411,12 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <div className="inline-block px-3 py-1 bg-slate-900 text-white text-[10px] font-bold tracking-wider rounded-xs uppercase">
+                  <div className="text-right shrink-0">
+                    <div className="inline-block px-2.5 py-1 bg-slate-900 text-white text-[9px] sm:text-[10px] font-bold tracking-wider rounded-xs uppercase">
                       {customHeaderTitle}
                     </div>
                     <div className="mt-2 text-[10px] text-slate-700 space-y-0.5 font-mono">
-                      <p><strong>Invoice No:</strong> {currentInvoice.voucherNo}</p>
+                      <p><strong>Doc No:</strong> {currentInvoice.voucherNo}</p>
                       <p><strong>Date:</strong> {currentInvoice.date}</p>
                       <p><strong>Payment Mode:</strong> {currentInvoice.paymentMode}</p>
                     </div>
@@ -297,16 +425,16 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
               </div>
 
               {/* Party & Dispatch Box */}
-              <div className="grid grid-cols-2 gap-3 border border-slate-300 p-2.5 rounded-xs mb-3 bg-slate-50/50 text-[10px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border border-slate-300 p-2.5 rounded-xs mb-3 bg-slate-50/50 text-[10px]">
                 <div>
                   <p className="uppercase font-bold text-slate-500 tracking-wider">
-                    Customer (Buyer) Details
+                    {currentInvoice.type === 'PURCHASE' ? 'Supplier (Vendor) Details' : 'Customer (Buyer) Details'}
                   </p>
                   <p className="font-bold text-slate-950 text-xs mt-0.5">
-                    {party?.name || currentInvoice.partyName || 'Cash Sale Customer'}
+                    {party?.name || currentInvoice.partyName || 'Cash Party'}
                   </p>
                   <p className="text-slate-600 mt-0.5">
-                    {party?.address || 'Local Cash Billing'}
+                    {party?.address || 'Local Transaction'}
                   </p>
                   <p className="mt-1">
                     GSTIN: <strong className="font-mono">{party?.gstin || 'Unregistered B2C'}</strong>
@@ -314,9 +442,9 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   <p>State: Code {party?.stateCode || settings.stateCode}</p>
                 </div>
 
-                <div className="border-l border-slate-200 pl-3">
+                <div className="sm:border-l border-slate-200 sm:pl-3 pt-2 sm:pt-0 border-t sm:border-t-0">
                   <p className="uppercase font-bold text-slate-500 tracking-wider">
-                    Dispatched From
+                    Business Address
                   </p>
                   <p className="font-semibold text-slate-900 mt-0.5">
                     {settings.name}
@@ -333,15 +461,17 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
               </div>
 
               {/* Items Table */}
-              <div className="border border-slate-300 rounded-xs overflow-hidden mb-3">
-                <table className="w-full text-left border-collapse print-table text-[10px]">
+              <div className="border border-slate-300 rounded-xs overflow-x-auto mb-3">
+                <table className="w-full text-left border-collapse print-table text-[10px] min-w-[420px]">
                   <thead>
                     <tr className="bg-slate-100 border-b border-slate-300 font-bold text-slate-800 uppercase">
                       <th className="py-1 px-1.5 w-6 text-center border-r border-slate-200">#</th>
                       <th className="py-1 px-2 border-r border-slate-200">Description of Goods</th>
                       <th className="py-1 px-1.5 w-14 text-center border-r border-slate-200">HSN</th>
                       <th className="py-1 px-1.5 w-10 text-right border-r border-slate-200">Qty</th>
-                      <th className="py-1 px-1.5 w-14 text-right border-r border-slate-200">Rate</th>
+                      <th className="py-1 px-1.5 w-16 text-right border-r border-slate-200">
+                        {currentInvoice.isGstInclusive ? 'Rate (Incl)' : 'Rate'}
+                      </th>
                       <th className="py-1 px-2 w-16 text-right border-r border-slate-200">Taxable</th>
                       <th className="py-1 px-1.5 w-10 text-center border-r border-slate-200">GST</th>
                       <th className="py-1 px-2 w-18 text-right">Amount (₹)</th>
@@ -381,8 +511,8 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
               </div>
 
               {/* Amount in words & Totals */}
-              <div className="grid grid-cols-12 gap-2 mb-3">
-                <div className="col-span-7 flex flex-col justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-3">
+                <div className="sm:col-span-7 flex flex-col justify-between">
                   <div>
                     <p className="text-[9px] font-bold uppercase text-slate-500">
                       Amount in words:
@@ -401,9 +531,9 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   )}
                 </div>
 
-                <div className="col-span-5 border border-slate-300 rounded-xs p-2 bg-slate-50 font-mono text-[10px] space-y-0.5">
+                <div className="sm:col-span-5 border border-slate-300 rounded-xs p-2 bg-slate-50 font-mono text-[10px] space-y-0.5">
                   <div className="flex justify-between">
-                    <span>Taxable:</span>
+                    <span>Taxable Subtotal:</span>
                     <span>{formatINR(currentInvoice.subtotal)}</span>
                   </div>
                   {currentInvoice.cgstTotal > 0 && (
@@ -432,12 +562,12 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
               </div>
 
               {/* HSN Table if enabled */}
-              {showHsnSummary && (
-                <div className="border border-slate-200 rounded-xs mb-3 text-[9px]">
+              {showHsnSummary && Object.keys(hsnBreakup).length > 0 && (
+                <div className="border border-slate-200 rounded-xs mb-3 text-[9px] overflow-x-auto">
                   <div className="bg-slate-100 px-2 py-0.5 font-bold text-slate-700">
-                    HSN / SAC Summary
+                    HSN / SAC Summary Breakdown
                   </div>
-                  <table className="w-full text-center border-collapse">
+                  <table className="w-full text-center border-collapse min-w-[360px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 font-semibold">
                         <th className="py-0.5 px-1">HSN</th>
@@ -479,15 +609,15 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   <p className="font-semibold text-slate-800">
                     {settings.authorizedSignatoryTitle}
                   </p>
-                  <div className="mt-6 border-t border-slate-400 w-36 pt-0.5 text-center text-slate-500">
+                  <div className="mt-6 border-t border-slate-400 w-32 sm:w-36 pt-0.5 text-center text-slate-500">
                     Authorized Signatory
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="p-12 text-slate-400">
-              No sales invoice selected.
+            <div className="p-12 text-slate-400 text-center">
+              No invoice document selected.
             </div>
           )}
         </div>
