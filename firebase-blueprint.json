@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "ledger_account": {
+      "title": "Ledger Account",
+      "description": "Party or general ledger account (Customer, Vendor, Bank, Cash, Expense, Revenue)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "group": { "type": "string", "enum": ["Sundry Debtors", "Sundry Creditors", "Bank Accounts", "Cash-in-hand", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Purchase Accounts"] },
+        "gstin": { "type": "string", "maxLength": 20 },
+        "stateCode": { "type": "string", "maxLength": 5 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 250 },
+        "openingBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "group"]
+    },
+    "inventory_item": {
+      "title": "Inventory Item",
+      "description": "Stock products with HSN code, pricing, GST rates and branch stock counts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "sku": { "type": "string", "maxLength": 60 },
+        "hsnCode": { "type": "string", "maxLength": 20 },
+        "unit": { "type": "string", "enum": ["Pcs", "Box", "Kg", "Mtr", "Ltr", "Set"] },
+        "purchasePrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "gstRate": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "stockByBranch": { "type": "object" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "sku", "hsnCode", "unit", "sellingPrice", "gstRate"]
+    },
+    "voucher": {
+      "title": "Transaction Voucher",
+      "description": "Day book transactions, invoices, bills, payments, receipts, credit/debit notes and stock transfers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "voucherNo": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 30 },
+        "type": { "type": "string", "enum": ["SALE", "PURCHASE", "PAYMENT", "RECEIPT", "CONTRA", "CREDIT_NOTE", "DEBIT_NOTE", "STOCK_TRANSFER"] },
+        "partyId": { "type": "string", "maxLength": 128 },
+        "partyName": { "type": "string", "maxLength": 100 },
+        "sourceBranchId": { "type": "string", "maxLength": 128 },
+        "destinationBranchId": { "type": "string", "maxLength": 128 },
+        "paymentMode": { "type": "string", "enum": ["CASH", "BANK", "UPI", "CREDIT"] },
+        "referenceNo": { "type": "string", "maxLength": 60 },
+        "subtotal": { "type": "number" },
+        "cgstTotal": { "type": "number" },
+        "sgstTotal": { "type": "number" },
+        "igstTotal": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "items": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "voucherNo", "date", "type", "grandTotal"]
+    },
+    "branch": {
+      "title": "Branch or Warehouse",
+      "description": "Physical branch or distribution hub",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "code": { "type": "string", "maxLength": 20 },
+        "address": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "isHeadOffice": { "type": "boolean" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "company_settings": {
+      "title": "Company Settings",
+      "description": "Business profile, GSTIN, bank details, and invoice formatting preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "gstin": { "type": "string", "maxLength": 20 },
+        "state": { "type": "string", "maxLength": 50 },
+        "stateCode": { "type": "string", "maxLength": 5 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 250 },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "accountNo": { "type": "string", "maxLength": 40 },
+        "ifsc": { "type": "string", "maxLength": 20 },
+        "branch": { "type": "string", "maxLength": 100 },
+        "upiId": { "type": "string", "maxLength": 80 },
+        "invoiceTerms": { "type": "string", "maxLength": 500 },
+        "paperSize": { "type": "string", "maxLength": 10 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/ledgers/{ledgerId}": {
+      "schema": "ledger_account",
+      "description": "Chart of accounts and party ledger documents"
+    },
+    "/inventory/{itemId}": {
+      "schema": "inventory_item",
+      "description": "Stock products and inventory catalog"
+    },
+    "/vouchers/{voucherId}": {
+      "schema": "voucher",
+      "description": "Day book transactions and commercial bills"
+    },
+    "/branches/{branchId}": {
+      "schema": "branch",
+      "description": "Branches and distribution locations"
+    },
+    "/settings/{settingId}": {
+      "schema": "company_settings",
+      "description": "Company profile and invoicing configuration"
+    }
+  }
+}

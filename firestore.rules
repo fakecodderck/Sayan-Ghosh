@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidLedger(data) {
+      return data.keys().hasAll(['id', 'name', 'group']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.group in ['Sundry Debtors', 'Sundry Creditors', 'Bank Accounts', 'Cash-in-hand', 'Direct Expenses', 'Indirect Expenses', 'Sales Accounts', 'Purchase Accounts'];
+    }
+
+    function isValidItem(data) {
+      return data.keys().hasAll(['id', 'name', 'sku', 'hsnCode', 'unit', 'sellingPrice', 'gstRate']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.sku is string && data.sku.size() <= 60 &&
+             data.hsnCode is string && data.hsnCode.size() <= 20 &&
+             data.unit in ['Pcs', 'Box', 'Kg', 'Mtr', 'Ltr', 'Set'] &&
+             data.sellingPrice is number && data.sellingPrice >= 0 &&
+             data.gstRate is number && data.gstRate >= 0;
+    }
+
+    function isValidVoucher(data) {
+      return data.keys().hasAll(['id', 'voucherNo', 'date', 'type', 'grandTotal']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.voucherNo is string && data.voucherNo.size() > 0 && data.voucherNo.size() <= 50 &&
+             data.date is string && data.date.size() <= 35 &&
+             data.type in ['SALE', 'PURCHASE', 'PAYMENT', 'RECEIPT', 'CONTRA', 'CREDIT_NOTE', 'DEBIT_NOTE', 'STOCK_TRANSFER'] &&
+             data.grandTotal is number;
+    }
+
+    function isValidBranch(data) {
+      return data.keys().hasAll(['id', 'name', 'code']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.code is string && data.code.size() <= 20;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['id', 'name']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120;
+    }
+
+    // Ledgers collection
+    match /ledgers/{ledgerId} {
+      allow read: if isSignedIn() && isValidId(ledgerId);
+      allow create: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming());
+      allow update: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(ledgerId);
+    }
+
+    // Inventory Catalog
+    match /inventory/{itemId} {
+      allow read: if isSignedIn() && isValidId(itemId);
+      allow create: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
+      allow update: if isSignedIn() && isValidId(itemId) && isValidItem(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(itemId);
+    }
+
+    // Vouchers (Day Book, Sales, Purchases, Payments, Credit/Debit notes)
+    match /vouchers/{voucherId} {
+      allow read: if isSignedIn() && isValidId(voucherId);
+      allow create: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming());
+      allow update: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(voucherId);
+    }
+
+    // Branches
+    match /branches/{branchId} {
+      allow read: if isSignedIn() && isValidId(branchId);
+      allow create: if isSignedIn() && isValidId(branchId) && isValidBranch(incoming());
+      allow update: if isSignedIn() && isValidId(branchId) && isValidBranch(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(branchId);
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isSignedIn() && isValidId(settingId);
+      allow create: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming());
+      allow update: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(settingId);
+    }
+  }
+}

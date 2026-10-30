@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white dark:bg-slate-950 dark:text-slate-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Print styling for A5 & A4 GST invoices */
+@media print {
+  @page {
+    size: A5 portrait;
+    margin: 6mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  /* Hide app navigation and controls when printing */
+  .no-print,
+  aside,
+  header,
+  nav,
+  button,
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Show print container full bleed */
+  .print-only-container {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .print-table th,
+  .print-table td {
+    border-color: #333 !important;
+  }
+}
