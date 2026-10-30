@@ -8,7 +8,8 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
-  getDocFromServer
+  getDocFromServer,
+  writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
@@ -156,3 +157,71 @@ export async function saveSettingsToFirestore(settings: CompanySettings) {
     handleFirestoreError(err, OperationType.WRITE, `${Collections.SETTINGS}/${settings.id}`);
   }
 }
+
+/**
+ * Atomically commits a transaction voucher, its affected inventory items, and its affected ledgers.
+ * If any single write fails, the entire batch aborts cleanly.
+ */
+export async function commitVoucherAtomicBatch(
+  voucher: TransactionVoucher,
+  updatedItems: InventoryItem[],
+  updatedLedgers: LedgerAccount[]
+) {
+  try {
+    const batch = writeBatch(db);
+
+    // 1. Write the voucher document
+    const voucherRef = doc(db, Collections.VOUCHERS, voucher.id);
+    batch.set(voucherRef, voucher);
+
+    // 2. Write all updated inventory stock documents
+    for (const item of updatedItems) {
+      const itemRef = doc(db, Collections.INVENTORY, item.id);
+      batch.set(itemRef, item);
+    }
+
+    // 3. Write all updated ledger balance documents
+    for (const ledger of updatedLedgers) {
+      const ledgerRef = doc(db, Collections.LEDGERS, ledger.id);
+      batch.set(ledgerRef, ledger);
+    }
+
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${Collections.VOUCHERS}/${voucher.id}`);
+  }
+}
+
+/**
+ * Atomically deletes a voucher and restores affected inventory items and ledgers to their pre-voucher states.
+ */
+export async function revertVoucherAtomicBatch(
+  voucherId: string,
+  restoredItems: InventoryItem[],
+  restoredLedgers: LedgerAccount[]
+) {
+  try {
+    const batch = writeBatch(db);
+
+    // 1. Delete voucher
+    const voucherRef = doc(db, Collections.VOUCHERS, voucherId);
+    batch.delete(voucherRef);
+
+    // 2. Revert inventory items
+    for (const item of restoredItems) {
+      const itemRef = doc(db, Collections.INVENTORY, item.id);
+      batch.set(itemRef, item);
+    }
+
+    // 3. Revert ledgers
+    for (const ledger of restoredLedgers) {
+      const ledgerRef = doc(db, Collections.LEDGERS, ledger.id);
+      batch.set(ledgerRef, ledger);
+    }
+
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${Collections.VOUCHERS}/${voucherId}`);
+  }
+}
+

@@ -5,19 +5,21 @@ import {
   Plus,
   Moon,
   Sun,
-  Cloud,
-  CloudOff,
   LogIn,
   LogOut,
   Palette,
-  Check
+  Check,
+  Search,
+  User as UserIcon
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { signInWithGoogle, logOut } from '../services/firebase';
 import { THEME_PRESETS, applyThemeColor, getThemePreset } from '../utils/theme';
+import { ActiveModule } from './Sidebar';
 
 interface NavbarProps {
   onOpenNewVoucher: () => void;
+  onNavigate?: (module: ActiveModule) => void;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
   isMobileMenuOpen: boolean;
@@ -26,13 +28,15 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewVoucher,
+  onNavigate,
   darkMode,
   setDarkMode,
   isMobileMenuOpen,
   setIsMobileMenuOpen,
 }) => {
-  const { user, isSyncing, settings, updateSettings } = useAccounting();
+  const { user, settings, updateSettings } = useAccounting();
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
 
   const currentPreset = getThemePreset(settings.themeColor || 'blue');
 
@@ -46,59 +50,62 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="no-print h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4 sticky top-0 z-40">
+    <header className="no-print h-14 sm:h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-40 w-full">
       {/* Zone 1: Mobile Hamburger + Brand Zone */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+        {/* Mobile Hamburger Drawer Toggle */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="lg:hidden p-2 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[40px] min-h-[40px] flex items-center justify-center transition-colors"
+          className="lg:hidden p-1.5 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shrink-0"
           aria-label="Toggle navigation menu"
         >
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
+        {/* Brand Logo & Name (Click to return to Dashboard) */}
         <div
-          className="w-8 h-8 sm:w-9 sm:h-9 text-white rounded-lg flex items-center justify-center font-bold text-base sm:text-lg shadow-xs shrink-0 transition-colors"
-          style={{ backgroundColor: currentPreset.primaryHex }}
+          onClick={() => onNavigate && onNavigate('dashboard')}
+          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group min-w-0"
+          title="Go to Dashboard Overview"
         >
-          A
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap">
-            Apex Ledger
-          </span>
-          <span className="text-[10px] text-slate-500 font-mono hidden sm:inline leading-none">
-            {settings.gstin ? `GSTIN: ${settings.gstin}` : 'Unregistered (B2C)'}
-          </span>
-        </div>
-      </div>
-
-      {/* Zone 2: Middle Status Indicators */}
-      <div className="hidden md:flex items-center gap-4 text-xs">
-        {user ? (
-          <span className="flex items-center gap-2 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-full text-emerald-700 dark:text-emerald-300 font-semibold text-[11px] shadow-2xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          <div
+            className="w-7 h-7 sm:w-9 sm:h-9 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-lg shadow-2xs shrink-0 transition-transform group-hover:scale-105"
+            style={{ backgroundColor: currentPreset.primaryHex }}
+          >
+            A
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs sm:text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate max-w-[120px] xs:max-w-[160px] sm:max-w-[220px] md:max-w-none">
+              {settings.name || 'Apex Ledger'}
             </span>
-            <Cloud className="w-3.5 h-3.5" />
-            <span>{isSyncing ? 'Syncing...' : 'Real-Time Cloud Sync'}</span>
-          </span>
-        ) : (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-400 font-medium text-[11px]">
-            <CloudOff className="w-3.5 h-3.5" />
-            <span>Local Mode</span>
-          </span>
-        )}
+            <span className="text-[10px] text-slate-400 font-mono hidden sm:inline leading-none truncate">
+              {settings.gstin ? `GSTIN: ${settings.gstin}` : 'Accounting & Inventory'}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Zone 3: 1 Primary Action + Theme Toggle + Color Palette + User Auth */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Quick UI Color Theme Picker Popover */}
-        <div className="relative">
+      {/* Zone 2: Global Search Bar (Desktop / Tablet) */}
+      <div className="hidden md:flex flex-1 max-w-md lg:max-w-lg mx-2 lg:mx-4">
+        <div className="relative w-full">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={globalSearch}
+            onChange={e => setGlobalSearch(e.target.value)}
+            placeholder="Search anything... (Customers, Suppliers, Products, Vouchers)"
+            className="w-full pl-9 pr-4 py-1.5 sm:py-2 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-transparent focus:border-blue-500 dark:focus:border-blue-400 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 transition-all outline-hidden"
+          />
+        </div>
+      </div>
+
+      {/* Zone 3: Actions + Theme + Auth */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Quick UI Color Theme Picker (Hidden on small mobile, available in Settings) */}
+        <div className="relative hidden sm:block">
           <button
             onClick={() => setShowColorPicker(!showColorPicker)}
-            className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center gap-1"
+            className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center gap-1"
             title="Customise Website UI Theme Color"
           >
             <Palette className="w-4 h-4" />
@@ -154,21 +161,21 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Dark/Light mode toggle */}
         <button
           onClick={() => setDarkMode(!darkMode)}
-          className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
-          title="Toggle Theme"
+          className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[34px] sm:min-w-[38px] min-h-[34px] sm:min-h-[38px] flex items-center justify-center"
+          title="Toggle Dark / Light Theme"
         >
-          {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-600" />}
         </button>
 
         {/* User Auth */}
         {user ? (
-          <div className="flex items-center gap-1.5">
-            <span className="hidden xl:inline text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[110px]">
-              {user.displayName || user.email}
+          <div className="flex items-center gap-1">
+            <span className="hidden xl:inline text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[100px]">
+              {user.displayName ? user.displayName.split(' ')[0] : 'Admin'}
             </span>
             <button
               onClick={() => logOut()}
-              className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[40px] min-h-[40px] flex items-center justify-center"
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[34px] sm:min-w-[38px] min-h-[34px] sm:min-h-[38px] flex items-center justify-center transition-colors"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -177,25 +184,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         ) : (
           <button
             onClick={() => signInWithGoogle()}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors min-h-[34px]"
+            title="Sign in with Google"
           >
             <LogIn className="w-3.5 h-3.5" />
-            <span>Sign In</span>
+            <span className="hidden sm:inline">Sign In</span>
           </button>
         )}
 
-        {/* Primary Action Button */}
+        {/* Primary Action Button (Compact Plus icon on mobile, Full text on desktop) */}
         <button
           onClick={onOpenNewVoucher}
-          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px] hover:opacity-90 active:scale-95"
+          className="flex items-center justify-center gap-1.5 p-2 sm:px-3.5 sm:py-2 text-white text-xs font-bold rounded-xl shadow-xs transition-all whitespace-nowrap min-w-[34px] sm:min-w-[auto] min-h-[34px] sm:min-h-[38px] hover:opacity-90 active:scale-95 shrink-0"
           style={{ backgroundColor: currentPreset.primaryHex }}
+          title="Create New Transaction Voucher"
         >
           <Plus className="w-4 h-4" />
-          <span className="hidden xs:inline">+ New Voucher</span>
-          <span className="xs:hidden">New</span>
+          <span className="hidden sm:inline">New Voucher</span>
         </button>
       </div>
     </header>
   );
 };
-

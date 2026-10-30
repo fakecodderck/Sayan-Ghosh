@@ -6,8 +6,9 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
+        "companyId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 100 },
-        "group": { "type": "string", "enum": ["Sundry Debtors", "Sundry Creditors", "Bank Accounts", "Cash-in-hand", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Purchase Accounts"] },
+        "group": { "type": "string", "enum": ["Sundry Debtors", "Sundry Creditors", "Bank Accounts", "Cash-in-hand", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Purchase Accounts", "Duties & Taxes"] },
         "gstin": { "type": "string", "maxLength": 20 },
         "stateCode": { "type": "string", "maxLength": 5 },
         "phone": { "type": "string", "maxLength": 20 },

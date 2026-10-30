@@ -42,6 +42,7 @@ export const InventoryView: React.FC = () => {
   const [newGstRate, setNewGstRate] = useState(18);
   const [newMinStock, setNewMinStock] = useState(20);
   const [newInitialQty, setNewInitialQty] = useState(50);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => {
@@ -75,25 +76,30 @@ export const InventoryView: React.FC = () => {
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+    setAddError(null);
 
-    await addInventoryItem({
-      name: newName.trim(),
-      sku: newSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      hsnCode: newHsn.trim() || '8544',
-      unit: newUnit,
-      purchasePrice: Number(newPurchasePrice) || 0,
-      sellingPrice: Number(newSellingPrice) || 0,
-      gstRate: Number(newGstRate) || 18,
-      minStockAlert: Number(newMinStock) || 10,
-      currentStock: Number(newInitialQty) || 0,
-    });
+    try {
+      await addInventoryItem({
+        name: newName.trim(),
+        sku: newSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+        hsnCode: newHsn.trim() || '8544',
+        unit: newUnit,
+        purchasePrice: Number(newPurchasePrice) || 0,
+        sellingPrice: Number(newSellingPrice) || 0,
+        gstRate: Number(newGstRate) || 18,
+        minStockAlert: Number(newMinStock) || 10,
+        currentStock: Number(newInitialQty) || 0,
+      });
 
-    setShowAddModal(false);
-    setNewName('');
-    setNewSku('');
-    setNewHsn('');
-    setNewPurchasePrice(0);
-    setNewSellingPrice(0);
+      setShowAddModal(false);
+      setNewName('');
+      setNewSku('');
+      setNewHsn('');
+      setNewPurchasePrice(0);
+      setNewSellingPrice(0);
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to add product');
+    }
   };
 
   const handleApplyAdjustment = async () => {
@@ -423,6 +429,11 @@ export const InventoryView: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddItem} className="space-y-4 text-xs">
+              {addError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                  {addError}
+                </div>
+              )}
               <div>
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Product / Item Name *

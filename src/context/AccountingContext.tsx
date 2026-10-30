@@ -1,12 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import {
   CompanySettings,
   InventoryItem,
   LedgerAccount,
-  TransactionVoucher,
-  VoucherType
+  TransactionVoucher
 } from '../types/accounting';
 import {
   initialCompanySettings,
@@ -17,18 +16,24 @@ import {
 import {
   auth,
   Collections,
+  commitVoucherAtomicBatch,
   db,
   deleteInventoryItemFromFirestore,
   deleteLedgerFromFirestore,
-  deleteVoucherFromFirestore,
   handleFirestoreError,
   OperationType,
+  revertVoucherAtomicBatch,
   saveInventoryItemToFirestore,
   saveLedgerToFirestore,
   saveSettingsToFirestore,
-  saveVoucherToFirestore,
   testConnection
 } from '../services/firebase';
+import {
+  computeInventoryDeltas,
+  computeLedgerDeltas,
+  ensureSystemLedgers,
+  generateJournalEntries
+} from '../utils/doubleEntryEngine';
 
 interface DateFilter {
   startDate: string;
@@ -65,10 +70,10 @@ interface AccountingContextType {
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEYS = {
-  VOUCHERS: 'apex_vouchers_v3',
-  LEDGERS: 'apex_ledgers_v3',
-  INVENTORY: 'apex_inventory_v3',
-  SETTINGS: 'apex_settings_v3',
+  VOUCHERS: 'apex_vouchers_v4',
+  LEDGERS: 'apex_ledgers_v4',
+  INVENTORY: 'apex_inventory_v4',
+  SETTINGS: 'apex_settings_v4',
 };
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -76,25 +81,42 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Initialize with clean local/seed data
+  // Initialize with clean local data and ensured system chart of accounts
   const [vouchers, setVouchers] = useState<TransactionVoucher[]>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.VOUCHERS);
-    return saved ? JSON.parse(saved) : initialVouchers;
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.VOUCHERS);
+      return saved ? JSON.parse(saved) : initialVouchers;
+    } catch {
+      return initialVouchers;
+    }
   });
 
   const [ledgers, setLedgers] = useState<LedgerAccount[]>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.LEDGERS);
-    return saved ? JSON.parse(saved) : initialLedgers;
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.LEDGERS);
+      const parsed = saved ? JSON.parse(saved) : initialLedgers;
+      return ensureSystemLedgers(parsed);
+    } catch {
+      return ensureSystemLedgers(initialLedgers);
+    }
   });
 
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.INVENTORY);
-    return saved ? JSON.parse(saved) : initialInventory;
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.INVENTORY);
+      return saved ? JSON.parse(saved) : initialInventory;
+    } catch {
+      return initialInventory;
+    }
   });
 
   const [settings, setSettings] = useState<CompanySettings>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
-    return saved ? JSON.parse(saved) : initialCompanySettings;
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
+      return saved ? JSON.parse(saved) : initialCompanySettings;
+    } catch {
+      return initialCompanySettings;
+    }
   });
 
   const [dateFilter, setDateFilter] = useState<DateFilter>({
@@ -119,31 +141,36 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
 
-  // Auth & Firestore real-time synchronization with auto anonymous sign in
+  // Auth & Connection Check
   useEffect(() => {
     testConnection().then(connected => {
       setIsFirebaseConnected(connected);
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, async currentUser => {
-      if (!currentUser) {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        // Attempt anonymous sign-in gracefully if enabled, otherwise fallback to guest mode
         try {
           const anon = await signInAnonymously(auth);
           setUser(anon.user);
-        } catch (err) {
-          console.warn('Anonymous auth initialization:', err);
+        } catch {
+          // Anonymous authentication not enabled on this project; proceed in secure offline/local mode
+          setUser(null);
         }
-      } else {
-        setUser(currentUser);
       }
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // Listen to Firestore real-time updates when authenticated
+  // Listen to Firestore real-time updates ONLY when authenticated
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setIsSyncing(false);
+      return;
+    }
 
     setIsSyncing(true);
 
@@ -152,11 +179,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       snapshot => {
         const cloudVouchers: TransactionVoucher[] = [];
         snapshot.forEach(docSnap => cloudVouchers.push(docSnap.data() as TransactionVoucher));
-        setVouchers(cloudVouchers);
+        if (cloudVouchers.length > 0) {
+          setVouchers(cloudVouchers);
+        }
         setIsSyncing(false);
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, Collections.VOUCHERS);
+        console.warn('Vouchers sync info:', error.message);
         setIsSyncing(false);
       }
     );
@@ -167,13 +196,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const cloudLedgers: LedgerAccount[] = [];
         snapshot.forEach(docSnap => cloudLedgers.push(docSnap.data() as LedgerAccount));
         if (cloudLedgers.length > 0) {
-          setLedgers(cloudLedgers);
-        } else {
-          setLedgers(initialLedgers);
+          setLedgers(ensureSystemLedgers(cloudLedgers, user.uid));
         }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, Collections.LEDGERS);
+        console.warn('Ledgers sync info:', error.message);
       }
     );
 
@@ -182,10 +209,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       snapshot => {
         const cloudInventory: InventoryItem[] = [];
         snapshot.forEach(docSnap => cloudInventory.push(docSnap.data() as InventoryItem));
-        setInventory(cloudInventory);
+        if (cloudInventory.length > 0) {
+          setInventory(cloudInventory);
+        }
       },
       error => {
-        handleFirestoreError(error, OperationType.GET, Collections.INVENTORY);
+        console.warn('Inventory sync info:', error.message);
       }
     );
 
@@ -200,7 +229,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       },
       error => {
-        console.warn('Settings snapshot warn:', error);
+        console.warn('Settings sync info:', error.message);
       }
     );
 
@@ -216,139 +245,147 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const getLedgerById = (id?: string) => ledgers.find(l => l.id === id);
   const getItemById = (id?: string) => inventory.find(i => i.id === id);
 
-  // Recalculate party current balance and inventory counts
+  /**
+   * Atomic Double-Entry Voucher Creation
+   */
   const addVoucher = async (voucherData: Omit<TransactionVoucher, 'id'>): Promise<string> => {
     const newId = `vouch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const companyId = user?.uid || settings.id || 'company_apex_01';
+
+    // 1. Generate balanced journal entries
+    const journalEntries = generateJournalEntries(voucherData, ledgers);
+
     const fullVoucher: TransactionVoucher = {
       ...voucherData,
       id: newId,
+      companyId,
+      journalEntries,
       createdAt: new Date().toISOString(),
     };
 
-    let updatedInventoryState = [...inventory];
-    let updatedLedgerState = [...ledgers];
+    // 2. Compute ledger adjustments from journal entries
+    const ledgerDeltas = computeLedgerDeltas(journalEntries, false);
+    const updatedLedgers = ledgers.map(l => {
+      if (!ledgerDeltas.has(l.id)) return l;
+      const delta = ledgerDeltas.get(l.id) || 0;
+      return {
+        ...l,
+        currentBalance: Number(((l.currentBalance || 0) + delta).toFixed(2)),
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
-    // 1. Update Inventory Stock based on voucher type
-    if (fullVoucher.type === 'SALE') {
-      updatedInventoryState = updatedInventoryState.map(item => {
-        const line = fullVoucher.items.find(it => it.itemId === item.id);
-        if (!line) return item;
-        return {
-          ...item,
-          currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
-        };
-      });
-    } else if (fullVoucher.type === 'PURCHASE') {
-      updatedInventoryState = updatedInventoryState.map(item => {
-        const line = fullVoucher.items.find(it => it.itemId === item.id);
-        if (!line) return item;
-        return {
-          ...item,
-          currentStock: (item.currentStock || 0) + line.qty,
-        };
-      });
-    } else if (fullVoucher.type === 'CREDIT_NOTE') {
-      updatedInventoryState = updatedInventoryState.map(item => {
-        const line = fullVoucher.items.find(it => it.itemId === item.id);
-        if (!line) return item;
-        return {
-          ...item,
-          currentStock: (item.currentStock || 0) + line.qty,
-        };
-      });
-    } else if (fullVoucher.type === 'DEBIT_NOTE') {
-      updatedInventoryState = updatedInventoryState.map(item => {
-        const line = fullVoucher.items.find(it => it.itemId === item.id);
-        if (!line) return item;
-        return {
-          ...item,
-          currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
-        };
-      });
-    }
+    // 3. Compute inventory adjustments
+    const itemDeltas = computeInventoryDeltas(fullVoucher, false);
+    const updatedInventory = inventory.map(item => {
+      if (!itemDeltas.has(item.id)) return item;
+      const delta = itemDeltas.get(item.id) || 0;
+      return {
+        ...item,
+        currentStock: Math.max(0, (item.currentStock || 0) + delta),
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
-    // 2. Update Ledger Balances (Double Entry Impact)
-    if (fullVoucher.partyId) {
-      updatedLedgerState = updatedLedgerState.map(l => {
-        if (l.id !== fullVoucher.partyId) return l;
-
-        let delta = 0;
-        if (fullVoucher.type === 'SALE') {
-          delta = fullVoucher.grandTotal;
-        } else if (fullVoucher.type === 'RECEIPT') {
-          delta = -fullVoucher.grandTotal;
-        } else if (fullVoucher.type === 'PURCHASE') {
-          delta = -fullVoucher.grandTotal;
-        } else if (fullVoucher.type === 'PAYMENT') {
-          delta = fullVoucher.grandTotal;
-        } else if (fullVoucher.type === 'CREDIT_NOTE') {
-          delta = -fullVoucher.grandTotal;
-        } else if (fullVoucher.type === 'DEBIT_NOTE') {
-          delta = fullVoucher.grandTotal;
-        }
-
-        return {
-          ...l,
-          currentBalance: Number((l.currentBalance + delta).toFixed(2)),
-        };
-      });
-    }
-
-    setInventory(updatedInventoryState);
-    setLedgers(updatedLedgerState);
+    // 4. Update local state immediately
+    setInventory(updatedInventory);
+    setLedgers(updatedLedgers);
     setVouchers(prev => [fullVoucher, ...prev]);
 
-    // 3. Firestore cloud persistence
+    // 5. Commit atomically to Firestore if authenticated
     if (user) {
+      const affectedLedgers = updatedLedgers.filter(l => ledgerDeltas.has(l.id));
+      const affectedItems = updatedInventory.filter(i => itemDeltas.has(i.id));
+
       try {
-        await saveVoucherToFirestore(fullVoucher);
-
-        // Also persist updated stock quantities for involved items
-        for (const line of fullVoucher.items) {
-          const updatedItem = updatedInventoryState.find(i => i.id === line.itemId);
-          if (updatedItem) {
-            await saveInventoryItemToFirestore(updatedItem);
-          }
-        }
-
-        // Also persist updated party balance
-        if (fullVoucher.partyId) {
-          const updatedParty = updatedLedgerState.find(l => l.id === fullVoucher.partyId);
-          if (updatedParty) {
-            await saveLedgerToFirestore(updatedParty);
-          }
-        }
+        await commitVoucherAtomicBatch(fullVoucher, affectedItems, affectedLedgers);
       } catch (err) {
-        console.warn('Voucher saved locally, cloud sync pending:', err);
+        console.warn('Cloud batch sync pending, stored in local cache:', err);
       }
     }
 
     return newId;
   };
 
+  /**
+   * Atomic Double-Entry Voucher Deletion & Reversal
+   */
   const deleteVoucher = async (id: string) => {
+    const targetVoucher = vouchers.find(v => v.id === id);
+    if (!targetVoucher) return;
+
+    // 1. Compute reversal ledger adjustments
+    const journalEntries = targetVoucher.journalEntries || generateJournalEntries(targetVoucher, ledgers);
+    const reverseLedgerDeltas = computeLedgerDeltas(journalEntries, true); // true = reversal
+
+    const restoredLedgers = ledgers.map(l => {
+      if (!reverseLedgerDeltas.has(l.id)) return l;
+      const delta = reverseLedgerDeltas.get(l.id) || 0;
+      return {
+        ...l,
+        currentBalance: Number(((l.currentBalance || 0) + delta).toFixed(2)),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    // 2. Compute reversal inventory stock adjustments
+    const reverseItemDeltas = computeInventoryDeltas(targetVoucher, true); // true = reversal
+    const restoredInventory = inventory.map(item => {
+      if (!reverseItemDeltas.has(item.id)) return item;
+      const delta = reverseItemDeltas.get(item.id) || 0;
+      return {
+        ...item,
+        currentStock: Math.max(0, (item.currentStock || 0) + delta),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    // 3. Update local state immediately
     setVouchers(prev => prev.filter(v => v.id !== id));
+    setLedgers(restoredLedgers);
+    setInventory(restoredInventory);
+
+    // 4. Commit atomic batch reversal to Firestore if authenticated
     if (user) {
+      const affectedLedgers = restoredLedgers.filter(l => reverseLedgerDeltas.has(l.id));
+      const affectedItems = restoredInventory.filter(i => reverseItemDeltas.has(i.id));
+
       try {
-        await deleteVoucherFromFirestore(id);
+        await revertVoucherAtomicBatch(id, affectedItems, affectedLedgers);
       } catch (err) {
-        console.warn('Voucher deleted locally:', err);
+        console.warn('Cloud reversal batch pending, restored in local cache:', err);
       }
     }
   };
 
+  /**
+   * Add Ledger with Duplicate Check
+   */
   const addLedger = async (ledgerData: Omit<LedgerAccount, 'id'>): Promise<string> => {
+    // Duplicate check within same group
+    const duplicate = ledgers.find(
+      l => l.group === ledgerData.group && l.name.trim().toLowerCase() === ledgerData.name.trim().toLowerCase()
+    );
+    if (duplicate) {
+      throw new Error(`A ledger account "${ledgerData.name.trim()}" already exists in ${ledgerData.group}.`);
+    }
+
     const newId = `ledger_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const fullLedger: LedgerAccount = {
       ...ledgerData,
       id: newId,
+      companyId: user?.uid || settings.id,
       currentBalance: ledgerData.openingBalance || 0,
       createdAt: new Date().toISOString(),
     };
 
     setLedgers(prev => [fullLedger, ...prev]);
     if (user) {
-      await saveLedgerToFirestore(fullLedger);
+      try {
+        await saveLedgerToFirestore(fullLedger);
+      } catch (err) {
+        console.warn('Ledger saved in local storage, cloud sync pending:', err);
+      }
     }
     return newId;
   };
@@ -356,28 +393,63 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const updateLedger = async (updated: LedgerAccount) => {
     setLedgers(prev => prev.map(l => (l.id === updated.id ? updated : l)));
     if (user) {
-      await saveLedgerToFirestore(updated);
+      try {
+        await saveLedgerToFirestore(updated);
+      } catch (err) {
+        console.warn('Ledger update saved locally:', err);
+      }
     }
   };
 
   const deleteLedger = async (id: string) => {
     setLedgers(prev => prev.filter(l => l.id !== id));
     if (user) {
-      await deleteLedgerFromFirestore(id);
+      try {
+        await deleteLedgerFromFirestore(id);
+      } catch (err) {
+        console.warn('Ledger deleted locally:', err);
+      }
     }
   };
 
+  /**
+   * Add Inventory Item with SKU & Name Duplicate Validation
+   */
   const addInventoryItem = async (itemData: Omit<InventoryItem, 'id'>): Promise<string> => {
+    // Check duplicate SKU
+    if (itemData.sku && itemData.sku.trim()) {
+      const dupSku = inventory.find(
+        i => i.sku.trim().toLowerCase() === itemData.sku.trim().toLowerCase()
+      );
+      if (dupSku) {
+        throw new Error(`An item with SKU "${itemData.sku.trim()}" already exists (${dupSku.name}).`);
+      }
+    }
+
+    // Check duplicate Name
+    const dupName = inventory.find(
+      i => i.name.trim().toLowerCase() === itemData.name.trim().toLowerCase()
+    );
+    if (dupName) {
+      throw new Error(`An item named "${itemData.name.trim()}" already exists.`);
+    }
+
     const newId = `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const fullItem: InventoryItem = {
       ...itemData,
       id: newId,
+      companyId: user?.uid || settings.id,
+      openingStock: itemData.openingStock ?? itemData.currentStock ?? 0,
       createdAt: new Date().toISOString(),
     };
 
     setInventory(prev => [fullItem, ...prev]);
     if (user) {
-      await saveInventoryItemToFirestore(fullItem);
+      try {
+        await saveInventoryItemToFirestore(fullItem);
+      } catch (err) {
+        console.warn('Inventory item saved locally, cloud sync pending:', err);
+      }
     }
     return newId;
   };
@@ -385,14 +457,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const updateInventoryItem = async (updated: InventoryItem) => {
     setInventory(prev => prev.map(i => (i.id === updated.id ? updated : i)));
     if (user) {
-      await saveInventoryItemToFirestore(updated);
+      try {
+        await saveInventoryItemToFirestore(updated);
+      } catch (err) {
+        console.warn('Inventory update saved locally:', err);
+      }
     }
   };
 
   const deleteInventoryItem = async (id: string) => {
     setInventory(prev => prev.filter(i => i.id !== id));
     if (user) {
-      await deleteInventoryItemFromFirestore(id);
+      try {
+        await deleteInventoryItemFromFirestore(id);
+      } catch (err) {
+        console.warn('Inventory item deleted locally:', err);
+      }
     }
   };
 
@@ -404,9 +484,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const updated = {
           ...i,
           currentStock: Math.max(0, current + deltaQty),
+          updatedAt: new Date().toISOString(),
         };
         if (user) {
-          saveInventoryItemToFirestore(updated);
+          saveInventoryItemToFirestore(updated).catch(e => console.warn(e));
         }
         return updated;
       })
@@ -416,16 +497,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const updateSettings = async (updated: CompanySettings) => {
     setSettings(updated);
     if (user) {
-      await saveSettingsToFirestore(updated);
+      try {
+        await saveSettingsToFirestore(updated);
+      } catch (err) {
+        console.warn('Settings saved locally:', err);
+      }
     }
   };
 
   const resetToSampleData = () => {
     setVouchers(initialVouchers);
-    setLedgers(initialLedgers);
+    setLedgers(ensureSystemLedgers(initialLedgers));
     setInventory(initialInventory);
     setSettings(initialCompanySettings);
-    localStorage.clear();
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.VOUCHERS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.LEDGERS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.INVENTORY);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.SETTINGS);
   };
 
   return (

@@ -54,6 +54,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
   const [referenceNo, setReferenceNo] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [directAmount, setDirectAmount] = useState<number>(0);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Line items for goods transactions
   const isGoodsTransaction = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(type);
@@ -212,14 +213,20 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
     if (isGoodsTransaction && items.length === 0) {
-      alert('Please add at least one line item.');
+      setFormError('Please add at least one line item.');
       return;
     }
 
     if (!isGoodsTransaction && directAmount <= 0) {
-      alert('Please enter a valid amount.');
+      setFormError('Please enter a valid amount.');
+      return;
+    }
+
+    if ((type === 'PAYMENT' || type === 'RECEIPT') && !partyId) {
+      setFormError('Please select a party account for this transaction.');
       return;
     }
 
@@ -246,7 +253,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       if (onSuccess) onSuccess(createdId);
       onClose();
     } catch (err: any) {
-      alert(err.message || 'Failed to save voucher');
+      setFormError(err.message || 'Failed to save voucher');
     }
   };
 
@@ -279,6 +286,11 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 text-xs">
+          {formError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+              {formError}
+            </div>
+          )}
           {/* Voucher Type Tabs (Horizontal scrolling on mobile) */}
           <div>
             <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">

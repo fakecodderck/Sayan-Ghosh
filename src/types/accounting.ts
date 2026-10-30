@@ -6,10 +6,12 @@ export type LedgerGroup =
   | 'Direct Expenses'
   | 'Indirect Expenses'
   | 'Sales Accounts'
-  | 'Purchase Accounts';
+  | 'Purchase Accounts'
+  | 'Duties & Taxes';
 
 export interface LedgerAccount {
   id: string;
+  companyId?: string;
   name: string;
   group: LedgerGroup;
   contactPerson?: string;
@@ -32,6 +34,7 @@ export type UnitType = 'Pcs' | 'Box' | 'Kg' | 'Mtr' | 'Ltr' | 'Set' | 'Bag' | 'R
 
 export interface InventoryItem {
   id: string;
+  companyId?: string;
   name: string;
   sku: string;
   hsnCode: string;
@@ -40,6 +43,7 @@ export interface InventoryItem {
   sellingPrice: number;
   gstRate: number; // 0, 5, 12, 18, 28
   minStockAlert: number;
+  openingStock?: number;
   currentStock: number;
   description?: string;
   category?: string;
@@ -75,8 +79,18 @@ export interface VoucherLineItem {
   total: number;
 }
 
+export interface JournalLineItem {
+  accountId: string;
+  accountName: string;
+  accountGroup: LedgerGroup;
+  debit: number;
+  credit: number;
+  notes?: string;
+}
+
 export interface TransactionVoucher {
   id: string;
+  companyId?: string;
   voucherNo: string;
   date: string; // YYYY-MM-DD
   type: VoucherType;
@@ -91,6 +105,7 @@ export interface TransactionVoucher {
   igstTotal: number;
   grandTotal: number;
   items: VoucherLineItem[];
+  journalEntries?: JournalLineItem[];
   notes?: string;
   createdBy?: string;
   createdAt?: string;

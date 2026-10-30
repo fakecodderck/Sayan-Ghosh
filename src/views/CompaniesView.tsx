@@ -54,6 +54,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const [address, setAddress] = useState('');
   const [stateCode, setStateCode] = useState('27');
   const [openingBalance, setOpeningBalance] = useState(0);
+  const [companyError, setCompanyError] = useState<string | null>(null);
 
   // Filter only Sundry Creditors (Companies / Suppliers)
   const companies = useMemo(() => {
@@ -109,26 +110,31 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    setCompanyError(null);
 
     // In double entry, initial payable to supplier is negative
     const opBal = Number(openingBalance) || 0;
     const initialBal = opBal !== 0 ? -Math.abs(opBal) : 0;
 
-    await addLedger({
-      name: name.trim(),
-      group: 'Sundry Creditors',
-      contactPerson: contactPerson.trim() || undefined,
-      gstin: gstin.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      stateCode: stateCode.trim() || '27',
-      openingBalance: initialBal,
-      currentBalance: initialBal,
-    });
+    try {
+      await addLedger({
+        name: name.trim(),
+        group: 'Sundry Creditors',
+        contactPerson: contactPerson.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        stateCode: stateCode.trim() || '27',
+        openingBalance: initialBal,
+        currentBalance: initialBal,
+      });
 
-    setShowAddModal(false);
-    resetForm();
+      setShowAddModal(false);
+      resetForm();
+    } catch (err: any) {
+      setCompanyError(err.message || 'Failed to add company');
+    }
   };
 
   const handleUpdateCompany = async (e: React.FormEvent) => {
@@ -749,6 +755,11 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateCompany} className="space-y-4 text-xs">
+              {companyError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                  {companyError}
+                </div>
+              )}
               <div>
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Company Name *

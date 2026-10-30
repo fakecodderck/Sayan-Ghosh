@@ -5,9 +5,20 @@ import {
   VoucherLineItem
 } from '../types/accounting';
 
-export function isInterStateTransaction(companyStateCode: string, partyStateCode?: string): boolean {
-  if (!partyStateCode || !companyStateCode) return false;
-  return companyStateCode.trim() !== partyStateCode.trim();
+export function isInterStateTransaction(
+  companyStateCode: string,
+  partyStateCode?: string,
+  partyGstin?: string
+): boolean {
+  let targetCode = partyStateCode?.trim();
+  if (!targetCode && partyGstin && partyGstin.trim().length >= 2) {
+    const prefix = partyGstin.trim().substring(0, 2);
+    if (/^\d{2}$/.test(prefix)) {
+      targetCode = prefix;
+    }
+  }
+  if (!targetCode || !companyStateCode) return false;
+  return companyStateCode.trim() !== targetCode;
 }
 
 export function calculateLineItem(
@@ -186,10 +197,14 @@ export function computeProfitAndLoss(
     closingStockValue += totalQty * (item.purchasePrice || 0);
   }
 
-  // Opening stock baseline (approximate 25% of purchases + initial baseline)
-  const openingStockValue = Math.round(closingStockValue * 0.7);
+  // Opening stock value from inventory master item opening quantities
+  let openingStockValue = 0;
+  for (const item of inventory) {
+    const openQty = typeof item.openingStock === 'number' ? item.openingStock : 0;
+    openingStockValue += openQty * (item.purchasePrice || 0);
+  }
 
-  const costOfGoodsSold = openingStockValue + netPurchases + directExpenses - closingStockValue;
+  const costOfGoodsSold = Math.max(0, openingStockValue + netPurchases + directExpenses - closingStockValue);
   const grossProfit = netSales - costOfGoodsSold;
   const grossProfitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
 

@@ -48,11 +48,16 @@ export const LedgersView: React.FC = () => {
 
   const activeLedger = ledgers.find(l => l.id === activeLedgerId) || filteredLedgers[0];
 
-  // Transactions specifically for the active ledger
+  // Transactions specifically affecting the active ledger
   const partyTransactions = useMemo(() => {
     if (!activeLedger) return [];
     return vouchers
-      .filter(v => v.partyId === activeLedger.id)
+      .filter(v => {
+        if (v.journalEntries && v.journalEntries.length > 0) {
+          return v.journalEntries.some(j => j.accountId === activeLedger.id);
+        }
+        return v.partyId === activeLedger.id;
+      })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [vouchers, activeLedger]);
 
@@ -65,27 +70,37 @@ export const LedgersView: React.FC = () => {
       let debit = 0;
       let credit = 0;
 
-      if (v.type === 'SALE') {
-        debit = v.grandTotal;
-      } else if (v.type === 'RECEIPT') {
-        credit = v.grandTotal;
-      } else if (v.type === 'PURCHASE') {
-        credit = v.grandTotal;
-      } else if (v.type === 'PAYMENT') {
-        debit = v.grandTotal;
-      } else if (v.type === 'CREDIT_NOTE') {
-        credit = v.grandTotal;
-      } else if (v.type === 'DEBIT_NOTE') {
-        debit = v.grandTotal;
+      const journalMatch = v.journalEntries?.find(j => j.accountId === activeLedger.id);
+      if (journalMatch) {
+        debit = journalMatch.debit;
+        credit = journalMatch.credit;
+      } else {
+        if (v.type === 'SALE') {
+          debit = v.grandTotal;
+        } else if (v.type === 'RECEIPT') {
+          credit = v.grandTotal;
+        } else if (v.type === 'PURCHASE') {
+          credit = v.grandTotal;
+        } else if (v.type === 'PAYMENT') {
+          debit = v.grandTotal;
+        } else if (v.type === 'CREDIT_NOTE') {
+          credit = v.grandTotal;
+        } else if (v.type === 'DEBIT_NOTE') {
+          debit = v.grandTotal;
+        }
       }
 
-      running = running + debit - credit;
+      if (activeLedger.group === 'Sales Accounts' || (activeLedger.group === 'Duties & Taxes' && !activeLedger.name.toLowerCase().includes('input'))) {
+        running = running + credit - debit;
+      } else {
+        running = running + debit - credit;
+      }
 
       return {
         ...v,
         debit,
         credit,
-        runningBalance: running,
+        runningBalance: Number(running.toFixed(2)),
       };
     });
   }, [partyTransactions, activeLedger]);

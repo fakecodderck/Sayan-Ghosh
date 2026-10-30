@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AccountingProvider } from './context/AccountingContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveModule } from './components/Sidebar';
+import { DashboardView } from './views/DashboardView';
 import { DayBookView } from './views/DayBookView';
 import { LedgersView } from './views/LedgersView';
 import { PurchasesView } from './views/PurchasesView';
@@ -11,6 +12,7 @@ import { PaymentsReceiptsView } from './views/PaymentsReceiptsView';
 import { CustomersView } from './views/CustomersView';
 import { CompaniesView } from './views/CompaniesView';
 import { GSTBillInvoiceView } from './views/GSTBillInvoiceView';
+import { GSTRReportsView } from './views/GSTRReportsView';
 import { ProfitLossView } from './views/ProfitLossView';
 import { CreditDebitNotesView } from './views/CreditDebitNotesView';
 import { SettingsView } from './views/SettingsView';
@@ -23,7 +25,7 @@ import { applyThemeColor } from './utils/theme';
 
 function MainApp() {
   const { settings } = useAccounting();
-  const [activeModule, setActiveModule] = useState<ActiveModule>('daybook');
+  const [activeModule, setActiveModule] = useState<ActiveModule>('dashboard');
   const [showNewVoucherModal, setShowNewVoucherModal] = useState(false);
   const [voucherModalType, setVoucherModalType] = useState<VoucherType>('SALE');
   const [voucherModalPartyId, setVoucherModalPartyId] = useState<string>('');
@@ -74,10 +76,11 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans overflow-x-hidden w-full">
       {/* Top Bar with Mobile Hamburger */}
       <Navbar
         onOpenNewVoucher={() => handleOpenNewSale()}
+        onNavigate={setActiveModule}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         isMobileMenuOpen={isMobileMenuOpen}
@@ -96,6 +99,19 @@ function MainApp() {
 
         {/* Viewport Canvas (Responsive padding for mobile/tablet) */}
         <main className="flex-1 p-3.5 sm:p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+          {activeModule === 'dashboard' && (
+            <DashboardView
+              onNavigate={setActiveModule}
+              onOpenNewVoucher={(type) => {
+                setVoucherModalType(type);
+                setVoucherModalPartyId('');
+                setVoucherModalIsGstBill(true);
+                setShowNewVoucherModal(true);
+              }}
+              onSelectVoucherForPrint={handleOpenPrint}
+            />
+          )}
+
           {activeModule === 'daybook' && (
             <DayBookView
               onSelectVoucherForPrint={handleOpenPrint}
@@ -153,6 +169,8 @@ function MainApp() {
               onOpenNewInvoice={(isGst) => handleOpenNewSale(undefined, isGst)}
             />
           )}
+
+          {activeModule === 'gstr_reports' && <GSTRReportsView />}
 
           {activeModule === 'credit_debit' && (
             <CreditDebitNotesView

@@ -56,6 +56,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [stateCode, setStateCode] = useState('27');
   const [creditLimit, setCreditLimit] = useState(100000);
   const [openingBalance, setOpeningBalance] = useState(0);
+  const [customerError, setCustomerError] = useState<string | null>(null);
 
   // Filter only Sundry Debtors (Customers)
   const customers = useMemo(() => {
@@ -111,23 +112,28 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    setCustomerError(null);
 
-    await addLedger({
-      name: name.trim(),
-      group: 'Sundry Debtors',
-      contactPerson: contactPerson.trim() || undefined,
-      gstin: gstin.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      stateCode: stateCode.trim() || '27',
-      creditLimit: Number(creditLimit) || 0,
-      openingBalance: Number(openingBalance) || 0,
-      currentBalance: Number(openingBalance) || 0,
-    });
+    try {
+      await addLedger({
+        name: name.trim(),
+        group: 'Sundry Debtors',
+        contactPerson: contactPerson.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        stateCode: stateCode.trim() || '27',
+        creditLimit: Number(creditLimit) || 0,
+        openingBalance: Number(openingBalance) || 0,
+        currentBalance: Number(openingBalance) || 0,
+      });
 
-    setShowAddModal(false);
-    resetForm();
+      setShowAddModal(false);
+      resetForm();
+    } catch (err: any) {
+      setCustomerError(err.message || 'Failed to add customer');
+    }
   };
 
   const handleUpdateCustomer = async (e: React.FormEvent) => {
@@ -786,6 +792,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateCustomer} className="space-y-4 text-xs">
+              {customerError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                  {customerError}
+                </div>
+              )}
               <div>
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Customer / Business Name *
