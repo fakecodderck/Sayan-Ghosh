@@ -14,7 +14,13 @@ import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
 import { formatINR, numberToWordsINR } from '../utils/gstCalculations';
 
-export const GSTBillInvoiceView: React.FC = () => {
+interface GSTBillInvoiceViewProps {
+  onOpenNewInvoice?: (isGst?: boolean) => void;
+}
+
+export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
+  onOpenNewInvoice,
+}) => {
   const { vouchers, settings, updateSettings, getLedgerById } = useAccounting();
 
   // Find all sales invoices
@@ -87,21 +93,34 @@ export const GSTBillInvoiceView: React.FC = () => {
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            GST Bill &amp; Tax Invoice Designer (A5 Print Workstation)
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <FileCheck2 className="w-5 h-5 text-blue-600" />
+            <span>GST Bill &amp; Tax Invoice Station</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Fully customizable A5 &amp; A4 print layout with live preview, QR code, and HSN statutory summary
+            Generate customer invoices with or without GST, and print in standard A5 portrait or A4 layouts
           </p>
         </div>
 
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md transition-all whitespace-nowrap"
-        >
-          <Printer className="w-4 h-4" />
-          <span>Print A5 Invoice Now</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenNewInvoice && (
+            <button
+              onClick={() => onOpenNewInvoice(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            >
+              <FileText className="w-4 h-4" />
+              <span>+ Generate New Bill</span>
+            </button>
+          )}
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print Invoice Now</span>
+          </button>
+        </div>
       </div>
 
       {/* Grid: Left Column Controls (4 cols) & Right Column Live Printable A5 Sheet (8 cols) */}

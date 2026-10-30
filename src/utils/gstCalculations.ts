@@ -15,7 +15,8 @@ export function calculateLineItem(
   rate: number,
   discountPercent: number,
   gstRate: number,
-  isInterState: boolean
+  isInterState: boolean,
+  isGstBill: boolean = true
 ): {
   taxableAmount: number;
   cgst: number;
@@ -31,12 +32,14 @@ export function calculateLineItem(
   let sgst = 0;
   let igst = 0;
 
-  if (isInterState) {
-    igst = Number(((taxableAmount * gstRate) / 100).toFixed(2));
-  } else {
-    const halfRate = gstRate / 2;
-    cgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
-    sgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+  if (isGstBill) {
+    if (isInterState) {
+      igst = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+    } else {
+      const halfRate = gstRate / 2;
+      cgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+      sgst = Number(((taxableAmount * halfRate) / 100).toFixed(2));
+    }
   }
 
   const total = Number((taxableAmount + cgst + sgst + igst).toFixed(2));

@@ -133,6 +133,22 @@ export async function deleteVoucherFromFirestore(voucherId: string) {
 }
 
 
+export async function deleteLedgerFromFirestore(ledgerId: string) {
+  try {
+    await deleteDoc(doc(db, Collections.LEDGERS, ledgerId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${Collections.LEDGERS}/${ledgerId}`);
+  }
+}
+
+export async function deleteInventoryItemFromFirestore(itemId: string) {
+  try {
+    await deleteDoc(doc(db, Collections.INVENTORY, itemId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${Collections.INVENTORY}/${itemId}`);
+  }
+}
+
 export async function saveSettingsToFirestore(settings: CompanySettings) {
   try {
     await setDoc(doc(db, Collections.SETTINGS, settings.id), settings);

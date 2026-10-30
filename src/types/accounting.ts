@@ -1,6 +1,6 @@
 export type LedgerGroup =
-  | 'Sundry Debtors'
-  | 'Sundry Creditors'
+  | 'Sundry Debtors' // Customers
+  | 'Sundry Creditors' // Companies / Suppliers
   | 'Bank Accounts'
   | 'Cash-in-hand'
   | 'Direct Expenses'
@@ -12,20 +12,23 @@ export interface LedgerAccount {
   id: string;
   name: string;
   group: LedgerGroup;
+  contactPerson?: string;
   gstin?: string;
+  pan?: string;
   stateCode?: string;
   phone?: string;
   email?: string;
   address?: string;
-  openingBalance: number; // positive = Debit (receivable), negative = Credit (payable)
+  openingBalance: number; // positive = Debit (Customer owes us), negative = Credit (We owe Company)
   currentBalance: number;
   creditLimit?: number;
+  notes?: string;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type UnitType = 'Pcs' | 'Box' | 'Kg' | 'Mtr' | 'Ltr' | 'Set';
+export type UnitType = 'Pcs' | 'Box' | 'Kg' | 'Mtr' | 'Ltr' | 'Set' | 'Bag' | 'Roll';
 
 export interface InventoryItem {
   id: string;
@@ -38,6 +41,8 @@ export interface InventoryItem {
   gstRate: number; // 0, 5, 12, 18, 28
   minStockAlert: number;
   currentStock: number;
+  description?: string;
+  category?: string;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -46,8 +51,8 @@ export interface InventoryItem {
 export type VoucherType =
   | 'SALE'
   | 'PURCHASE'
-  | 'PAYMENT'
-  | 'RECEIPT'
+  | 'PAYMENT' // We pay a Company / Expense
+  | 'RECEIPT' // Customer pays us
   | 'CONTRA'
   | 'CREDIT_NOTE'
   | 'DEBIT_NOTE';
@@ -75,10 +80,11 @@ export interface TransactionVoucher {
   voucherNo: string;
   date: string; // YYYY-MM-DD
   type: VoucherType;
-  partyId?: string;
+  partyId?: string; // Links to Customer or Company (LedgerAccount)
   partyName?: string;
+  isGstBill: boolean; // true = with GST, false = without GST (Non-GST / Bill of Supply)
   paymentMode: PaymentMode;
-  referenceNo?: string;
+  referenceNo?: string; // Cheque / UTR / Transaction ID
   subtotal: number;
   cgstTotal: number;
   sgstTotal: number;
@@ -90,6 +96,8 @@ export interface TransactionVoucher {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export type ThemeColor = 'blue' | 'emerald' | 'indigo' | 'amber' | 'rose' | 'purple' | 'slate';
 
 export interface CompanySettings {
   id: string;
@@ -109,6 +117,7 @@ export interface CompanySettings {
   paperSize: 'A5' | 'A4';
   showQrCode: boolean;
   authorizedSignatoryTitle: string;
+  themeColor?: ThemeColor;
   updatedAt?: string;
 }
 

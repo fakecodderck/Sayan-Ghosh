@@ -4,21 +4,31 @@ import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveModule } from './components/Sidebar';
 import { DayBookView } from './views/DayBookView';
 import { LedgersView } from './views/LedgersView';
-import { SalesPurchaseView } from './views/SalesPurchaseView';
+import { PurchasesView } from './views/PurchasesView';
+import { SalesView } from './views/SalesView';
 import { InventoryView } from './views/InventoryView';
 import { PaymentsReceiptsView } from './views/PaymentsReceiptsView';
-import { CreditDebitNotesView } from './views/CreditDebitNotesView';
+import { CustomersView } from './views/CustomersView';
+import { CompaniesView } from './views/CompaniesView';
 import { GSTBillInvoiceView } from './views/GSTBillInvoiceView';
 import { ProfitLossView } from './views/ProfitLossView';
-import { GSTRReportsView } from './views/GSTRReportsView';
+import { CreditDebitNotesView } from './views/CreditDebitNotesView';
 import { SettingsView } from './views/SettingsView';
 import { NewVoucherModal } from './components/NewVoucherModal';
 import { InvoicePrintModal } from './components/InvoicePrintModal';
-import { TransactionVoucher } from './types/accounting';
+import { TransactionVoucher, VoucherType } from './types/accounting';
+
+import { useAccounting } from './context/AccountingContext';
+import { applyThemeColor } from './utils/theme';
 
 function MainApp() {
+  const { settings } = useAccounting();
   const [activeModule, setActiveModule] = useState<ActiveModule>('daybook');
   const [showNewVoucherModal, setShowNewVoucherModal] = useState(false);
+  const [voucherModalType, setVoucherModalType] = useState<VoucherType>('SALE');
+  const [voucherModalPartyId, setVoucherModalPartyId] = useState<string>('');
+  const [voucherModalIsGstBill, setVoucherModalIsGstBill] = useState<boolean>(true);
+
   const [printingVoucher, setPrintingVoucher] = useState<TransactionVoucher | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -35,15 +45,39 @@ function MainApp() {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    applyThemeColor(settings.themeColor || 'blue');
+  }, [settings.themeColor]);
+
   const handleOpenPrint = (voucher: TransactionVoucher) => {
     setPrintingVoucher(voucher);
+  };
+
+  const handleOpenNewSale = (partyId?: string, isGst: boolean = true) => {
+    setVoucherModalType('SALE');
+    setVoucherModalPartyId(partyId || '');
+    setVoucherModalIsGstBill(isGst);
+    setShowNewVoucherModal(true);
+  };
+
+  const handleOpenNewPurchase = (partyId?: string) => {
+    setVoucherModalType('PURCHASE');
+    setVoucherModalPartyId(partyId || '');
+    setVoucherModalIsGstBill(true);
+    setShowNewVoucherModal(true);
+  };
+
+  const handleOpenNewPayment = (type: 'PAYMENT' | 'RECEIPT' = 'RECEIPT', partyId?: string) => {
+    setVoucherModalType(type);
+    setVoucherModalPartyId(partyId || '');
+    setShowNewVoucherModal(true);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       {/* Top Bar with Mobile Hamburger */}
       <Navbar
-        onOpenNewVoucher={() => setShowNewVoucherModal(true)}
+        onOpenNewVoucher={() => handleOpenNewSale()}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         isMobileMenuOpen={isMobileMenuOpen}
@@ -65,40 +99,71 @@ function MainApp() {
           {activeModule === 'daybook' && (
             <DayBookView
               onSelectVoucherForPrint={handleOpenPrint}
-              onOpenNewVoucher={() => setShowNewVoucherModal(true)}
+              onOpenNewVoucher={() => handleOpenNewSale()}
             />
           )}
 
           {activeModule === 'ledgers' && <LedgersView />}
 
-          {activeModule === 'sales_purchase' && (
-            <SalesPurchaseView
+          {activeModule === 'purchases' && (
+            <PurchasesView
               onSelectVoucherForPrint={handleOpenPrint}
-              onOpenNewVoucher={() => setShowNewVoucherModal(true)}
+              onOpenNewPurchase={handleOpenNewPurchase}
+              onNavigateToCompany={() => setActiveModule('companies')}
+            />
+          )}
+
+          {activeModule === 'sales' && (
+            <SalesView
+              onSelectVoucherForPrint={handleOpenPrint}
+              onOpenNewSale={handleOpenNewSale}
+              onNavigateToCustomer={() => setActiveModule('customers')}
             />
           )}
 
           {activeModule === 'inventory' && <InventoryView />}
 
+          {activeModule === 'profit_loss' && <ProfitLossView />}
+
           {activeModule === 'payments' && (
             <PaymentsReceiptsView
-              onOpenNewVoucher={() => setShowNewVoucherModal(true)}
+              onOpenNewVoucher={handleOpenNewPayment}
               onSelectVoucherForPrint={handleOpenPrint}
+            />
+          )}
+
+          {activeModule === 'customers' && (
+            <CustomersView
+              onSelectVoucherForPrint={handleOpenPrint}
+              onOpenNewSale={handleOpenNewSale}
+              onOpenNewReceipt={(partyId) => handleOpenNewPayment('RECEIPT', partyId)}
+            />
+          )}
+
+          {activeModule === 'companies' && (
+            <CompaniesView
+              onSelectVoucherForPrint={handleOpenPrint}
+              onOpenNewPurchase={handleOpenNewPurchase}
+              onOpenNewPayment={(partyId) => handleOpenNewPayment('PAYMENT', partyId)}
+            />
+          )}
+
+          {activeModule === 'gst_bill' && (
+            <GSTBillInvoiceView
+              onOpenNewInvoice={(isGst) => handleOpenNewSale(undefined, isGst)}
             />
           )}
 
           {activeModule === 'credit_debit' && (
             <CreditDebitNotesView
               onSelectVoucherForPrint={handleOpenPrint}
-              onOpenNewVoucher={() => setShowNewVoucherModal(true)}
+              onOpenNewVoucher={() => {
+                setVoucherModalType('CREDIT_NOTE');
+                setVoucherModalPartyId('');
+                setShowNewVoucherModal(true);
+              }}
             />
           )}
-
-          {activeModule === 'gst_bill' && <GSTBillInvoiceView />}
-
-          {activeModule === 'profit_loss' && <ProfitLossView />}
-
-          {activeModule === 'gstr_reports' && <GSTRReportsView />}
 
           {activeModule === 'settings' && <SettingsView />}
         </main>
@@ -107,6 +172,9 @@ function MainApp() {
       {/* New Voucher Creator Modal */}
       {showNewVoucherModal && (
         <NewVoucherModal
+          initialType={voucherModalType}
+          initialPartyId={voucherModalPartyId}
+          initialIsGstBill={voucherModalIsGstBill}
           onClose={() => setShowNewVoucherModal(false)}
         />
       )}

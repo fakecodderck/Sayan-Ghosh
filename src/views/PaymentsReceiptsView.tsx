@@ -15,7 +15,7 @@ import { PaymentMode, TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 
 interface PaymentsReceiptsViewProps {
-  onOpenNewVoucher: () => void;
+  onOpenNewVoucher: (type?: 'PAYMENT' | 'RECEIPT', partyId?: string) => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
 }
 
@@ -65,21 +65,31 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Payment &amp; Receipt Vouchers (Jama / Nam)
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-blue-600" />
+            <span>Payments &amp; Receipts (Cash / Bank / UPI)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cash, Bank NEFT/RTGS, and UPI digital receipt vouchers linked with party balances
+            Record customer receipts (customer pays me) or company payments (I pay a vendor), auto-adjusting ledger balances
           </p>
         </div>
 
-        <button
-          onClick={onOpenNewVoucher}
-          className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Record Payment / Receipt</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onOpenNewVoucher('RECEIPT')}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Customer Pays Me</span>
+          </button>
+          <button
+            onClick={() => onOpenNewVoucher('PAYMENT')}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ I Pay a Company</span>
+          </button>
+        </div>
       </div>
 
       {/* Cash & Bank Balances Strip */}

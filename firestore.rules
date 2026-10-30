@@ -37,7 +37,7 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
              data.sku is string && data.sku.size() <= 60 &&
              data.hsnCode is string && data.hsnCode.size() <= 20 &&
-             data.unit in ['Pcs', 'Box', 'Kg', 'Mtr', 'Ltr', 'Set'] &&
+             data.unit in ['Pcs', 'Box', 'Kg', 'Mtr', 'Ltr', 'Set', 'Bag', 'Roll'] &&
              data.sellingPrice is number && data.sellingPrice >= 0 &&
              data.gstRate is number && data.gstRate >= 0;
     }
@@ -51,22 +51,21 @@ service cloud.firestore {
              data.grandTotal is number;
     }
 
-    function isValidBranch(data) {
-      return data.keys().hasAll(['id', 'name', 'code']) &&
-             data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.code is string && data.code.size() <= 20;
-    }
-
     function isValidSettings(data) {
       return data.keys().hasAll(['id', 'name']) &&
              data.id is string && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 120;
     }
 
+    // Test connection document
+    match /test/{docId} {
+      allow read: if true;
+    }
+
     // Ledgers collection
     match /ledgers/{ledgerId} {
-      allow read: if isSignedIn() && isValidId(ledgerId);
+      allow get: if isSignedIn() && isValidId(ledgerId);
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming());
       allow update: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming()) && incoming().id == existing().id;
       allow delete: if isSignedIn() && isValidId(ledgerId);
@@ -74,7 +73,8 @@ service cloud.firestore {
 
     // Inventory Catalog
     match /inventory/{itemId} {
-      allow read: if isSignedIn() && isValidId(itemId);
+      allow get: if isSignedIn() && isValidId(itemId);
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
       allow update: if isSignedIn() && isValidId(itemId) && isValidItem(incoming()) && incoming().id == existing().id;
       allow delete: if isSignedIn() && isValidId(itemId);
@@ -82,23 +82,17 @@ service cloud.firestore {
 
     // Vouchers (Day Book, Sales, Purchases, Payments, Credit/Debit notes)
     match /vouchers/{voucherId} {
-      allow read: if isSignedIn() && isValidId(voucherId);
+      allow get: if isSignedIn() && isValidId(voucherId);
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming());
       allow update: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming()) && incoming().id == existing().id;
       allow delete: if isSignedIn() && isValidId(voucherId);
     }
 
-    // Branches
-    match /branches/{branchId} {
-      allow read: if isSignedIn() && isValidId(branchId);
-      allow create: if isSignedIn() && isValidId(branchId) && isValidBranch(incoming());
-      allow update: if isSignedIn() && isValidId(branchId) && isValidBranch(incoming()) && incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(branchId);
-    }
-
     // Settings
     match /settings/{settingId} {
-      allow read: if isSignedIn() && isValidId(settingId);
+      allow get: if isSignedIn() && isValidId(settingId);
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming());
       allow update: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming()) && incoming().id == existing().id;
       allow delete: if isSignedIn() && isValidId(settingId);

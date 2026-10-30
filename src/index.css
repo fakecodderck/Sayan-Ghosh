@@ -1,11 +1,37 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  --theme-primary: #2563eb;
+  --theme-primary-hover: #1d4ed8;
+  --theme-primary-light: #eff6ff;
+  --theme-primary-border: #bfdbfe;
+  --theme-primary-ring: rgba(37, 99, 235, 0.3);
+}
+
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white dark:bg-slate-950 dark:text-slate-100;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+}
+
+/* Theme utility classes driven by settings theme color */
+.theme-bg {
+  background-color: var(--theme-primary) !important;
+}
+.theme-bg-hover:hover {
+  background-color: var(--theme-primary-hover) !important;
+}
+.theme-text {
+  color: var(--theme-primary) !important;
+}
+.theme-border {
+  border-color: var(--theme-primary) !important;
+}
+.theme-ring:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--theme-primary-ring) !important;
 }
 
 /* Print styling for A5 & A4 GST invoices */

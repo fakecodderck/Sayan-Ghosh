@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { collection, onSnapshot } from 'firebase/firestore';
 import {
   CompanySettings,
@@ -18,6 +18,8 @@ import {
   auth,
   Collections,
   db,
+  deleteInventoryItemFromFirestore,
+  deleteLedgerFromFirestore,
   deleteVoucherFromFirestore,
   handleFirestoreError,
   OperationType,
@@ -49,8 +51,10 @@ interface AccountingContextType {
   deleteVoucher: (id: string) => Promise<void>;
   addLedger: (ledger: Omit<LedgerAccount, 'id'>) => Promise<string>;
   updateLedger: (ledger: LedgerAccount) => Promise<void>;
+  deleteLedger: (id: string) => Promise<void>;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => Promise<string>;
   updateInventoryItem: (item: InventoryItem) => Promise<void>;
+  deleteInventoryItem: (id: string) => Promise<void>;
   updateStockQuantity: (itemId: string, deltaQty: number) => Promise<void>;
   updateSettings: (settings: CompanySettings) => Promise<void>;
   resetToSampleData: () => void;
@@ -61,10 +65,10 @@ interface AccountingContextType {
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEYS = {
-  VOUCHERS: 'apex_vouchers_v2',
-  LEDGERS: 'apex_ledgers_v2',
-  INVENTORY: 'apex_inventory_v2',
-  SETTINGS: 'apex_settings_v2',
+  VOUCHERS: 'apex_vouchers_v3',
+  LEDGERS: 'apex_ledgers_v3',
+  INVENTORY: 'apex_inventory_v3',
+  SETTINGS: 'apex_settings_v3',
 };
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,7 +76,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Initialize with local/seed data
+  // Initialize with clean local/seed data
   const [vouchers, setVouchers] = useState<TransactionVoucher[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.VOUCHERS);
     return saved ? JSON.parse(saved) : initialVouchers;
@@ -115,20 +119,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
 
-  // Auth & Firestore real-time synchronization
+  // Auth & Firestore real-time synchronization with auto anonymous sign in
   useEffect(() => {
     testConnection().then(connected => {
       setIsFirebaseConnected(connected);
     });
 
-    const unsubscribeAuth = onAuthStateChanged(auth, currentUser => {
-      setUser(currentUser);
+    const unsubscribeAuth = onAuthStateChanged(auth, async currentUser => {
+      if (!currentUser) {
+        try {
+          const anon = await signInAnonymously(auth);
+          setUser(anon.user);
+        } catch (err) {
+          console.warn('Anonymous auth initialization:', err);
+        }
+      } else {
+        setUser(currentUser);
+      }
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // Listen to Firestore if authenticated
+  // Listen to Firestore real-time updates when authenticated
   useEffect(() => {
     if (!user) return;
 
@@ -137,11 +150,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const unsubVouchers = onSnapshot(
       collection(db, Collections.VOUCHERS),
       snapshot => {
-        if (!snapshot.empty) {
-          const cloudVouchers: TransactionVoucher[] = [];
-          snapshot.forEach(docSnap => cloudVouchers.push(docSnap.data() as TransactionVoucher));
-          setVouchers(cloudVouchers);
-        }
+        const cloudVouchers: TransactionVoucher[] = [];
+        snapshot.forEach(docSnap => cloudVouchers.push(docSnap.data() as TransactionVoucher));
+        setVouchers(cloudVouchers);
         setIsSyncing(false);
       },
       error => {
@@ -153,10 +164,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const unsubLedgers = onSnapshot(
       collection(db, Collections.LEDGERS),
       snapshot => {
-        if (!snapshot.empty) {
-          const cloudLedgers: LedgerAccount[] = [];
-          snapshot.forEach(docSnap => cloudLedgers.push(docSnap.data() as LedgerAccount));
+        const cloudLedgers: LedgerAccount[] = [];
+        snapshot.forEach(docSnap => cloudLedgers.push(docSnap.data() as LedgerAccount));
+        if (cloudLedgers.length > 0) {
           setLedgers(cloudLedgers);
+        } else {
+          setLedgers(initialLedgers);
         }
       },
       error => {
@@ -167,14 +180,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const unsubInventory = onSnapshot(
       collection(db, Collections.INVENTORY),
       snapshot => {
-        if (!snapshot.empty) {
-          const cloudInventory: InventoryItem[] = [];
-          snapshot.forEach(docSnap => cloudInventory.push(docSnap.data() as InventoryItem));
-          setInventory(cloudInventory);
-        }
+        const cloudInventory: InventoryItem[] = [];
+        snapshot.forEach(docSnap => cloudInventory.push(docSnap.data() as InventoryItem));
+        setInventory(cloudInventory);
       },
       error => {
         handleFirestoreError(error, OperationType.GET, Collections.INVENTORY);
+      }
+    );
+
+    const unsubSettings = onSnapshot(
+      collection(db, Collections.SETTINGS),
+      snapshot => {
+        if (!snapshot.empty) {
+          const firstSettingDoc = snapshot.docs[0].data() as CompanySettings;
+          if (firstSettingDoc && firstSettingDoc.name) {
+            setSettings(firstSettingDoc);
+          }
+        }
+      },
+      error => {
+        console.warn('Settings snapshot warn:', error);
       }
     );
 
@@ -182,6 +208,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       unsubVouchers();
       unsubLedgers();
       unsubInventory();
+      unsubSettings();
     };
   }, [user]);
 
@@ -198,97 +225,99 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       createdAt: new Date().toISOString(),
     };
 
+    let updatedInventoryState = [...inventory];
+    let updatedLedgerState = [...ledgers];
+
     // 1. Update Inventory Stock based on voucher type
     if (fullVoucher.type === 'SALE') {
-      setInventory(prev =>
-        prev.map(item => {
-          const line = fullVoucher.items.find(it => it.itemId === item.id);
-          if (!line) return item;
-          return {
-            ...item,
-            currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
-          };
-        })
-      );
+      updatedInventoryState = updatedInventoryState.map(item => {
+        const line = fullVoucher.items.find(it => it.itemId === item.id);
+        if (!line) return item;
+        return {
+          ...item,
+          currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
+        };
+      });
     } else if (fullVoucher.type === 'PURCHASE') {
-      setInventory(prev =>
-        prev.map(item => {
-          const line = fullVoucher.items.find(it => it.itemId === item.id);
-          if (!line) return item;
-          return {
-            ...item,
-            currentStock: (item.currentStock || 0) + line.qty,
-          };
-        })
-      );
+      updatedInventoryState = updatedInventoryState.map(item => {
+        const line = fullVoucher.items.find(it => it.itemId === item.id);
+        if (!line) return item;
+        return {
+          ...item,
+          currentStock: (item.currentStock || 0) + line.qty,
+        };
+      });
     } else if (fullVoucher.type === 'CREDIT_NOTE') {
-      // Sales Return: add returned items back to stock
-      setInventory(prev =>
-        prev.map(item => {
-          const line = fullVoucher.items.find(it => it.itemId === item.id);
-          if (!line) return item;
-          return {
-            ...item,
-            currentStock: (item.currentStock || 0) + line.qty,
-          };
-        })
-      );
+      updatedInventoryState = updatedInventoryState.map(item => {
+        const line = fullVoucher.items.find(it => it.itemId === item.id);
+        if (!line) return item;
+        return {
+          ...item,
+          currentStock: (item.currentStock || 0) + line.qty,
+        };
+      });
     } else if (fullVoucher.type === 'DEBIT_NOTE') {
-      // Purchase Return: reduce stock
-      setInventory(prev =>
-        prev.map(item => {
-          const line = fullVoucher.items.find(it => it.itemId === item.id);
-          if (!line) return item;
-          return {
-            ...item,
-            currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
-          };
-        })
-      );
+      updatedInventoryState = updatedInventoryState.map(item => {
+        const line = fullVoucher.items.find(it => it.itemId === item.id);
+        if (!line) return item;
+        return {
+          ...item,
+          currentStock: Math.max(0, (item.currentStock || 0) - line.qty),
+        };
+      });
     }
 
     // 2. Update Ledger Balances (Double Entry Impact)
     if (fullVoucher.partyId) {
-      setLedgers(prev =>
-        prev.map(l => {
-          if (l.id !== fullVoucher.partyId) return l;
+      updatedLedgerState = updatedLedgerState.map(l => {
+        if (l.id !== fullVoucher.partyId) return l;
 
-          let delta = 0;
-          if (fullVoucher.type === 'SALE') {
-            // Sale to Customer increases Debt (debit)
-            delta = fullVoucher.grandTotal;
-          } else if (fullVoucher.type === 'RECEIPT') {
-            // Receipt from Customer decreases Debt (credit)
-            delta = -fullVoucher.grandTotal;
-          } else if (fullVoucher.type === 'PURCHASE') {
-            // Purchase from Supplier increases our Payable (credit/negative balance)
-            delta = -fullVoucher.grandTotal;
-          } else if (fullVoucher.type === 'PAYMENT') {
-            // Payment to Supplier reduces our Payable (debit/positive delta)
-            delta = fullVoucher.grandTotal;
-          } else if (fullVoucher.type === 'CREDIT_NOTE') {
-            // Credit Note reduces Customer Debt
-            delta = -fullVoucher.grandTotal;
-          } else if (fullVoucher.type === 'DEBIT_NOTE') {
-            // Debit Note reduces Supplier Payable
-            delta = fullVoucher.grandTotal;
-          }
+        let delta = 0;
+        if (fullVoucher.type === 'SALE') {
+          delta = fullVoucher.grandTotal;
+        } else if (fullVoucher.type === 'RECEIPT') {
+          delta = -fullVoucher.grandTotal;
+        } else if (fullVoucher.type === 'PURCHASE') {
+          delta = -fullVoucher.grandTotal;
+        } else if (fullVoucher.type === 'PAYMENT') {
+          delta = fullVoucher.grandTotal;
+        } else if (fullVoucher.type === 'CREDIT_NOTE') {
+          delta = -fullVoucher.grandTotal;
+        } else if (fullVoucher.type === 'DEBIT_NOTE') {
+          delta = fullVoucher.grandTotal;
+        }
 
-          return {
-            ...l,
-            currentBalance: Number((l.currentBalance + delta).toFixed(2)),
-          };
-        })
-      );
+        return {
+          ...l,
+          currentBalance: Number((l.currentBalance + delta).toFixed(2)),
+        };
+      });
     }
 
-    // 3. Add to voucher register
+    setInventory(updatedInventoryState);
+    setLedgers(updatedLedgerState);
     setVouchers(prev => [fullVoucher, ...prev]);
 
-    // 4. Cloud sync if signed in
+    // 3. Firestore cloud persistence
     if (user) {
       try {
         await saveVoucherToFirestore(fullVoucher);
+
+        // Also persist updated stock quantities for involved items
+        for (const line of fullVoucher.items) {
+          const updatedItem = updatedInventoryState.find(i => i.id === line.itemId);
+          if (updatedItem) {
+            await saveInventoryItemToFirestore(updatedItem);
+          }
+        }
+
+        // Also persist updated party balance
+        if (fullVoucher.partyId) {
+          const updatedParty = updatedLedgerState.find(l => l.id === fullVoucher.partyId);
+          if (updatedParty) {
+            await saveLedgerToFirestore(updatedParty);
+          }
+        }
       } catch (err) {
         console.warn('Voucher saved locally, cloud sync pending:', err);
       }
@@ -331,6 +360,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  const deleteLedger = async (id: string) => {
+    setLedgers(prev => prev.filter(l => l.id !== id));
+    if (user) {
+      await deleteLedgerFromFirestore(id);
+    }
+  };
+
   const addInventoryItem = async (itemData: Omit<InventoryItem, 'id'>): Promise<string> => {
     const newId = `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const fullItem: InventoryItem = {
@@ -350,6 +386,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setInventory(prev => prev.map(i => (i.id === updated.id ? updated : i)));
     if (user) {
       await saveInventoryItemToFirestore(updated);
+    }
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    setInventory(prev => prev.filter(i => i.id !== id));
+    if (user) {
+      await deleteInventoryItemFromFirestore(id);
     }
   };
 
@@ -401,8 +444,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         deleteVoucher,
         addLedger,
         updateLedger,
+        deleteLedger,
         addInventoryItem,
         updateInventoryItem,
+        deleteInventoryItem,
         updateStockQuantity,
         updateSettings,
         resetToSampleData,

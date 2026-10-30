@@ -31,7 +31,7 @@
         "name": { "type": "string", "maxLength": 120 },
         "sku": { "type": "string", "maxLength": 60 },
         "hsnCode": { "type": "string", "maxLength": 20 },
-        "unit": { "type": "string", "enum": ["Pcs", "Box", "Kg", "Mtr", "Ltr", "Set"] },
+        "unit": { "type": "string", "enum": ["Pcs", "Box", "Kg", "Mtr", "Ltr", "Set", "Bag", "Roll"] },
         "purchasePrice": { "type": "number" },
         "sellingPrice": { "type": "number" },
         "gstRate": { "type": "number" },

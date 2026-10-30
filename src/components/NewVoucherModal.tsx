@@ -21,12 +21,16 @@ import {
 
 interface NewVoucherModalProps {
   initialType?: VoucherType;
+  initialPartyId?: string;
+  initialIsGstBill?: boolean;
   onClose: () => void;
   onSuccess?: (voucherId: string) => void;
 }
 
 export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
   initialType = 'SALE',
+  initialPartyId = '',
+  initialIsGstBill = true,
   onClose,
   onSuccess,
 }) => {
@@ -39,12 +43,13 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
   } = useAccounting();
 
   const [type, setType] = useState<VoucherType>(initialType);
+  const [isGstBill, setIsGstBill] = useState<boolean>(initialIsGstBill);
   const [voucherNo, setVoucherNo] = useState<string>(() => {
-    const prefix = type === 'SALE' ? 'INV' : type === 'PURCHASE' ? 'BILL' : type === 'PAYMENT' ? 'PMT' : type === 'RECEIPT' ? 'REC' : type === 'CREDIT_NOTE' ? 'CN' : 'DN';
+    const prefix = type === 'SALE' ? (initialIsGstBill ? 'INV' : 'BOS') : type === 'PURCHASE' ? 'BILL' : type === 'PAYMENT' ? 'PMT' : type === 'RECEIPT' ? 'REC' : type === 'CREDIT_NOTE' ? 'CN' : 'DN';
     return `${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
   });
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [partyId, setPartyId] = useState<string>('');
+  const [partyId, setPartyId] = useState<string>(initialPartyId);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CREDIT');
   const [referenceNo, setReferenceNo] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -55,12 +60,12 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
 
   const [items, setItems] = useState<VoucherLineItem[]>([
     {
-      itemId: inventory[0]?.id || '',
+      itemId: inventory[0]?.id || `custom_${Date.now()}`,
       name: inventory[0]?.name || '',
       hsn: inventory[0]?.hsnCode || '',
       qty: 1,
       unit: inventory[0]?.unit || 'Pcs',
-      rate: type === 'PURCHASE' ? inventory[0]?.purchasePrice || 0 : inventory[0]?.sellingPrice || 0,
+      rate: inventory[0] ? (type === 'PURCHASE' ? inventory[0].purchasePrice : inventory[0].sellingPrice) : 0,
       discount: 0,
       taxableAmount: 0,
       gstRate: inventory[0]?.gstRate || 18,
@@ -84,6 +89,34 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
     return true;
   });
 
+  const handleToggleGstBill = (val: boolean) => {
+    setIsGstBill(val);
+    if (type === 'SALE') {
+      const prefix = val ? 'INV' : 'BOS';
+      setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
+    }
+    setItems(prev =>
+      prev.map(it => {
+        const calc = calculateLineItem(
+          Number(it.qty) || 0,
+          Number(it.rate) || 0,
+          Number(it.discount) || 0,
+          Number(it.gstRate) || 0,
+          isInterState,
+          val
+        );
+        return {
+          ...it,
+          taxableAmount: calc.taxableAmount,
+          cgst: calc.cgst,
+          sgst: calc.sgst,
+          igst: calc.igst,
+          total: calc.total,
+        };
+      })
+    );
+  };
+
   const handleItemChange = (index: number, field: keyof VoucherLineItem, value: any) => {
     const updated = [...items];
     const current = { ...updated[index], [field]: value };
@@ -104,7 +137,8 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       Number(current.rate) || 0,
       Number(current.discount) || 0,
       Number(current.gstRate) || 0,
-      isInterState
+      isInterState,
+      isGstBill
     );
 
     current.taxableAmount = calc.taxableAmount;
@@ -118,28 +152,31 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
   };
 
   const addItemRow = () => {
-    if (inventory.length === 0) return;
     const inv = inventory[0];
+    const defaultRate = inv ? (type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice) : 0;
+    const defaultGst = inv ? inv.gstRate : 18;
+
     const calc = calculateLineItem(
       1,
-      type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice,
+      defaultRate,
       0,
-      inv.gstRate,
-      isInterState
+      defaultGst,
+      isInterState,
+      isGstBill
     );
 
     setItems(prev => [
       ...prev,
       {
-        itemId: inv.id,
-        name: inv.name,
-        hsn: inv.hsnCode,
+        itemId: inv?.id || `custom_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        name: inv?.name || '',
+        hsn: inv?.hsnCode || '',
         qty: 1,
-        unit: inv.unit,
-        rate: type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice,
+        unit: inv?.unit || 'Pcs',
+        rate: defaultRate,
         discount: 0,
         taxableAmount: calc.taxableAmount,
-        gstRate: inv.gstRate,
+        gstRate: defaultGst,
         cgst: calc.cgst,
         sgst: calc.sgst,
         igst: calc.igst,
@@ -192,6 +229,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       type,
       partyId: partyId || undefined,
       partyName: selectedParty?.name || undefined,
+      isGstBill: isGoodsTransaction ? isGstBill : false,
       paymentMode,
       referenceNo: referenceNo || undefined,
       subtotal,
@@ -211,6 +249,7 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
       alert(err.message || 'Failed to save voucher');
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
@@ -275,6 +314,44 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* GST vs Non-GST Toggle (Explicitly required for Sales & Purchases) */}
+          {isGoodsTransaction && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700/80">
+              <div>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  Tax Billing Type:
+                </span>
+                <span className="text-[11px] text-slate-500 ml-1.5">
+                  {isGstBill ? 'Standard GST Tax Invoice (with CGST/SGST/IGST breakdown)' : 'Bill of Supply / Non-GST Sale (0% Tax)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleToggleGstBill(true)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    isGstBill
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  ✓ With GST (Tax Invoice)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleGstBill(false)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    !isGstBill
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  Without GST (Non-GST)
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Primary Meta Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -374,17 +451,28 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
                     {items.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-2 px-3">
-                          <select
-                            value={row.itemId}
-                            onChange={e => handleItemChange(idx, 'itemId', e.target.value)}
-                            className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 font-medium"
-                          >
-                            {inventory.map(inv => (
-                              <option key={inv.id} value={inv.id}>
-                                {inv.name} (Stock: {inv.currentStock} {inv.unit})
-                              </option>
-                            ))}
-                          </select>
+                          {inventory.length > 0 ? (
+                            <select
+                              value={row.itemId}
+                              onChange={e => handleItemChange(idx, 'itemId', e.target.value)}
+                              className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 font-medium"
+                            >
+                              <option value="">Select Stock Item...</option>
+                              {inventory.map(inv => (
+                                <option key={inv.id} value={inv.id}>
+                                  {inv.name} (Stock: {inv.currentStock} {inv.unit})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder="Item Name / Particulars..."
+                              value={row.name}
+                              onChange={e => handleItemChange(idx, 'name', e.target.value)}
+                              className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 font-medium"
+                            />
+                          )}
                         </td>
                         <td className="py-2 px-2">
                           <input
