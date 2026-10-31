@@ -97,6 +97,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const gstr3bSummary = useMemo(() => computeGSTR3BSummary(vouchers, ledgers), [vouchers, ledgers]);
   const netGstPayable = gstr3bSummary.netTotalPayable;
 
+  // Month-over-Month (MoM) Growth Calculations
+  const { salesGrowth, purchaseGrowth } = useMemo(() => {
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    const prevDate = new Date(currentYear, currentMonth - 1, 1);
+    const prevMonth = prevDate.getMonth();
+    const prevYear = prevDate.getFullYear();
+
+    let currSales = 0;
+    let prevSales = 0;
+    let currPurchases = 0;
+    let prevPurchases = 0;
+
+    vouchers.forEach(v => {
+      if (!v.date) return;
+      const d = new Date(v.date);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+
+      if (m === currentMonth && y === currentYear) {
+        if (v.type === 'SALE') currSales += v.grandTotal || 0;
+        if (v.type === 'PURCHASE') currPurchases += v.grandTotal || 0;
+      } else if (m === prevMonth && y === prevYear) {
+        if (v.type === 'SALE') prevSales += v.grandTotal || 0;
+        if (v.type === 'PURCHASE') prevPurchases += v.grandTotal || 0;
+      }
+    });
+
+    const calcGrowth = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return Math.round(((curr - prev) / prev) * 100);
+    };
+
+    return {
+      salesGrowth: calcGrowth(currSales, prevSales),
+      purchaseGrowth: calcGrowth(currPurchases, prevPurchases),
+    };
+  }, [vouchers, today]);
+
   // 3. Trailing Monthly Bar Chart Data (Sales vs Purchases)
   const chartData = useMemo(() => {
     const monthCount = chartTimeframe === '3M' ? 3 : chartTimeframe === '1Y' ? 12 : 6;
@@ -330,8 +370,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2.5 pt-2 sm:mt-3 sm:pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center text-[10px] sm:text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
             <span className="flex items-center gap-0.5">
-              <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span>+12.5%</span>
+              {salesGrowth >= 0 ? <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : <TrendingDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-500" />}
+              <span className={salesGrowth < 0 ? 'text-rose-500' : ''}>
+                {salesGrowth >= 0 ? `+${salesGrowth}%` : `${salesGrowth}%`}
+              </span>
             </span>
             <span className="text-slate-400 font-normal ml-1 hidden xs:inline">vs last mo</span>
           </div>
@@ -355,8 +397,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2.5 pt-2 sm:mt-3 sm:pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center text-[10px] sm:text-[11px] font-semibold text-rose-600 dark:text-rose-400">
             <span className="flex items-center gap-0.5">
-              <TrendingDown className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span>-8.2%</span>
+              {purchaseGrowth >= 0 ? <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500" /> : <TrendingDown className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
+              <span className={purchaseGrowth >= 0 ? 'text-emerald-500' : ''}>
+                {purchaseGrowth >= 0 ? `+${purchaseGrowth}%` : `${purchaseGrowth}%`}
+              </span>
             </span>
             <span className="text-slate-400 font-normal ml-1 hidden xs:inline">vs last mo</span>
           </div>
@@ -379,11 +423,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h3>
           </div>
           <div className="mt-2.5 pt-2 sm:mt-3 sm:pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center text-[10px] sm:text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-            <span className="flex items-center gap-0.5">
-              <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span>+5.1%</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              {debtorsWithDue.length} party dues pending
             </span>
-            <span className="text-slate-400 font-normal ml-1 truncate">{debtorsWithDue.length} dues</span>
           </div>
         </div>
 
@@ -404,11 +446,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h3>
           </div>
           <div className="mt-2.5 pt-2 sm:mt-3 sm:pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-            <span className="flex items-center gap-0.5">
-              <TrendingDown className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span>-3.4%</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              {creditorsWithDue.length} vendor dues pending
             </span>
-            <span className="text-slate-400 font-normal ml-1 truncate">{creditorsWithDue.length} dues</span>
           </div>
         </div>
       </div>
@@ -543,8 +583,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {customerDebtors.length}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                  +3
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+                  Debtors
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -565,8 +605,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {supplierCreditors.length}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                  +2
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
+                  Creditors
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -587,8 +627,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {totalProductsCount}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                  +8
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                  Items
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -609,8 +649,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {vouchers.length}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                  +{vouchers.length}
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+                  Entries
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -631,8 +671,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {formatINR(netGstPayable)}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
-                  +6.2%
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+                  GSTR-3B
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -653,8 +693,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {formatINR(totalStockValue)}
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                  +4.1%
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400">
+                  Valuation
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>

@@ -1,6 +1,6 @@
 {
-  "name": "Apex Ledger & Inventory",
-  "description": "Enterprise-grade GST business management, double-entry accounting, multi-branch inventory distribution, and A5 tax billing system.",
+  "name": "Ghosh Agency",
+  "description": "Sala ABHI Besi lang lang maris na",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

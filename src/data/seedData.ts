@@ -6,23 +6,23 @@ import {
 } from '../types/accounting';
 
 export const initialCompanySettings: CompanySettings = {
-  id: 'company_apex_01',
-  name: 'Apex Traders & Distributors',
-  gstin: '',
-  state: 'Maharashtra',
-  stateCode: '27',
-  phone: '',
-  email: '',
-  address: '',
+  id: 'company_ghosh_01',
+  name: 'Ghosh Agency',
+  gstin: '19ABCDE1234F1Z5',
+  state: 'West Bengal',
+  stateCode: '19',
+  phone: '+91 98765 43210',
+  email: 'contact@ghoshagency.com',
+  address: 'Kolkata, West Bengal, India',
   bankName: 'HDFC Bank Ltd',
-  accountNo: '',
-  ifsc: '',
-  branch: 'Main Branch',
-  upiId: '',
+  accountNo: '50200012345678',
+  ifsc: 'HDFC0001234',
+  branch: 'Kolkata Branch',
+  upiId: 'ghoshagency@upi',
   invoiceTerms: '1. Goods once sold will not be taken back.\n2. Interest @18% p.a. will be charged if payment is delayed.\n3. Subject to local jurisdiction only.',
   paperSize: 'A5',
   showQrCode: true,
-  authorizedSignatoryTitle: 'For Apex Traders & Distributors',
+  authorizedSignatoryTitle: 'For Ghosh Agency',
 };
 
 // Clean base ledger accounts (No mock customers or suppliers)
