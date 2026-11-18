@@ -57,6 +57,10 @@ function MainApp() {
     applyThemeColor(settings.themeColor || 'blue');
   }, [settings.themeColor]);
 
+  useEffect(() => {
+    document.title = settings.name?.trim() || 'Ghosh Agency';
+  }, [settings.name]);
+
   const handleOpenPrint = (voucher: TransactionVoucher) => {
     setPrintingVoucher(voucher);
   };

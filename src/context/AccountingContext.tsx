@@ -117,7 +117,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [settings, setSettings] = useState<CompanySettings>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
-      return saved ? JSON.parse(saved) : initialCompanySettings;
+      if (!saved) return initialCompanySettings;
+      const parsed = JSON.parse(saved) as CompanySettings;
+      if (!parsed.name?.trim() || /^apex\b/i.test(parsed.name.trim())) {
+        return {
+          ...parsed,
+          name: 'Ghosh Agency',
+          authorizedSignatoryTitle:
+            !parsed.authorizedSignatoryTitle || /apex/i.test(parsed.authorizedSignatoryTitle)
+              ? 'For Ghosh Agency'
+              : parsed.authorizedSignatoryTitle,
+        };
+      }
+      return parsed;
     } catch {
       return initialCompanySettings;
     }
@@ -274,8 +286,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!snapshot.empty) {
           localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_SETTINGS, 'true');
           const firstSettingDoc = snapshot.docs[0].data() as CompanySettings;
-          if (firstSettingDoc && firstSettingDoc.name) {
-            setSettings(firstSettingDoc);
+          if (firstSettingDoc) {
+            const isLegacyPlaceholder =
+              !firstSettingDoc.name?.trim() || /^apex\b/i.test(firstSettingDoc.name.trim());
+            const normalizedSettings: CompanySettings = isLegacyPlaceholder
+              ? {
+                  ...firstSettingDoc,
+                  name: 'Ghosh Agency',
+                  authorizedSignatoryTitle:
+                    !firstSettingDoc.authorizedSignatoryTitle || /apex/i.test(firstSettingDoc.authorizedSignatoryTitle)
+                      ? 'For Ghosh Agency'
+                      : firstSettingDoc.authorizedSignatoryTitle,
+                }
+              : firstSettingDoc;
+            setSettings(normalizedSettings);
+            if (isLegacyPlaceholder) {
+              saveSettingsToFirestore(normalizedSettings).catch(() => {});
+            }
           }
         } else if (
           !snapshot.metadata.fromCache &&
