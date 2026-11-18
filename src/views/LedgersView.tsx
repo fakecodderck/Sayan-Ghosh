@@ -1,34 +1,57 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Users,
   Search,
   Plus,
   ArrowLeft,
-  X
+  X,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { LedgerAccount, LedgerGroup } from '../types/accounting';
+import { INDIAN_STATES, LedgerAccount, LedgerGroup } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { SYSTEM_LEDGER_DEFINITIONS } from '../utils/doubleEntryEngine';
 
 export const LedgersView: React.FC = () => {
-  const { ledgers, vouchers, addLedger } = useAccounting();
+  const { ledgers, vouchers, settings, addLedger, updateLedger, deleteLedger } = useAccounting();
+
+  const defaultStateCode = settings.stateCode || '19';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [activeLedgerId, setActiveLedgerId] = useState<string>(ledgers[0]?.id || '');
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
 
-  // New Ledger Modal state
-  const [showAddModal, setShowAddModal] = useState(false);
+  // Add / Edit Ledger Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [editingLedger, setEditingLedger] = useState<LedgerAccount | null>(null);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const [newLedgerName, setNewLedgerName] = useState('');
   const [newLedgerGroup, setNewLedgerGroup] = useState<LedgerGroup>('Sundry Debtors');
   const [newGstin, setNewGstin] = useState('');
-  const [newStateCode, setNewStateCode] = useState('27');
+  const [newStateCode, setNewStateCode] = useState(defaultStateCode);
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newOpeningBal, setNewOpeningBal] = useState(0);
   const [newCreditLimit, setNewCreditLimit] = useState(100000);
+
+  useEffect(() => {
+    if (!activeLedgerId && ledgers.length > 0) {
+      setActiveLedgerId(ledgers[0].id);
+    }
+  }, [activeLedgerId, ledgers]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModal(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showModal]);
 
   const filteredLedgers = useMemo(() => {
     return ledgers.filter(l => {
@@ -107,33 +130,89 @@ export const LedgersView: React.FC = () => {
 
   const handleSelectParty = (id: string) => {
     setActiveLedgerId(id);
+    setConfirmDeleteId(null);
     setMobileView('detail');
   };
 
-  const handleCreateLedger = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLedgerName.trim()) return;
-
-    await addLedger({
-      name: newLedgerName.trim(),
-      group: newLedgerGroup,
-      gstin: newGstin.trim() || undefined,
-      stateCode: newStateCode.trim() || undefined,
-      phone: newPhone.trim() || undefined,
-      email: newEmail.trim() || undefined,
-      address: newAddress.trim() || undefined,
-      openingBalance: Number(newOpeningBal) || 0,
-      currentBalance: Number(newOpeningBal) || 0,
-      creditLimit: Number(newCreditLimit) || undefined,
-    });
-
-    setShowAddModal(false);
+  const openCreateModal = () => {
+    setEditingLedger(null);
+    setLedgerError(null);
     setNewLedgerName('');
+    setNewLedgerGroup('Sundry Debtors');
     setNewGstin('');
+    setNewStateCode(defaultStateCode);
     setNewPhone('');
     setNewEmail('');
     setNewAddress('');
     setNewOpeningBal(0);
+    setNewCreditLimit(100000);
+    setShowModal(true);
+  };
+
+  const openEditModal = (ledger: LedgerAccount) => {
+    setEditingLedger(ledger);
+    setLedgerError(null);
+    setNewLedgerName(ledger.name);
+    setNewLedgerGroup(ledger.group);
+    setNewGstin(ledger.gstin || '');
+    setNewStateCode(ledger.stateCode || defaultStateCode);
+    setNewPhone(ledger.phone || '');
+    setNewEmail(ledger.email || '');
+    setNewAddress(ledger.address || '');
+    setNewOpeningBal(ledger.openingBalance || 0);
+    setNewCreditLimit(ledger.creditLimit || 100000);
+    setShowModal(true);
+  };
+
+  const handleSaveLedger = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLedgerName.trim()) return;
+    setLedgerError(null);
+
+    try {
+      if (editingLedger) {
+        await updateLedger({
+          ...editingLedger,
+          name: newLedgerName.trim(),
+          group: newLedgerGroup,
+          gstin: newGstin.trim() || undefined,
+          stateCode: newStateCode.trim() || undefined,
+          phone: newPhone.trim() || undefined,
+          email: newEmail.trim() || undefined,
+          address: newAddress.trim() || undefined,
+          creditLimit: Number(newCreditLimit) || undefined,
+        });
+      } else {
+        await addLedger({
+          name: newLedgerName.trim(),
+          group: newLedgerGroup,
+          gstin: newGstin.trim() || undefined,
+          stateCode: newStateCode.trim() || undefined,
+          phone: newPhone.trim() || undefined,
+          email: newEmail.trim() || undefined,
+          address: newAddress.trim() || undefined,
+          openingBalance: Number(newOpeningBal) || 0,
+          currentBalance: Number(newOpeningBal) || 0,
+          creditLimit: Number(newCreditLimit) || undefined,
+        });
+      }
+      setShowModal(false);
+    } catch (err: any) {
+      setLedgerError(err.message || 'Failed to save ledger account');
+    }
+  };
+
+  const handleDeleteLedger = async (id: string) => {
+    try {
+      await deleteLedger(id);
+      setConfirmDeleteId(null);
+      if (activeLedgerId === id) {
+        const next = ledgers.find(l => l.id !== id);
+        setActiveLedgerId(next?.id || '');
+      }
+    } catch {
+      setConfirmDeleteId(null);
+    }
   };
 
   return (
@@ -150,11 +229,12 @@ export const LedgersView: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          type="button"
+          onClick={openCreateModal}
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Create Ledger Account</span>
+          <span>Create Ledger Account</span>
         </button>
       </div>
 
@@ -175,7 +255,7 @@ export const LedgersView: React.FC = () => {
                 placeholder="Search party name or GSTIN..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-hidden"
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-hidden theme-ring"
               />
             </div>
 
@@ -183,11 +263,12 @@ export const LedgersView: React.FC = () => {
               {['ALL', 'Sundry Debtors', 'Sundry Creditors', 'Bank Accounts', 'Direct Expenses'].map(g => (
                 <button
                   key={g}
+                  type="button"
                   onClick={() => setSelectedGroup(g)}
                   className={`px-2.5 py-1.5 rounded-md whitespace-nowrap transition-colors min-h-[32px] ${
                     selectedGroup === g
-                      ? 'bg-blue-600 text-white font-medium'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 border border-slate-200 dark:border-slate-700'
+                      ? 'theme-bg text-white font-medium'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
                   {g === 'ALL' ? 'All' : g.replace('Sundry ', '')}
@@ -197,22 +278,23 @@ export const LedgersView: React.FC = () => {
           </div>
 
           {/* Ledger List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 p-1.5 space-y-0.5">
             {filteredLedgers.map(l => {
-              const isSelected = l.id === activeLedgerId;
+              const isSelected = l.id === activeLedger?.id;
               const isDebit = l.currentBalance >= 0;
               return (
                 <button
                   key={l.id}
+                  type="button"
                   onClick={() => handleSelectParty(l.id)}
-                  className={`w-full p-3 text-left transition-colors flex items-center justify-between min-h-[52px] ${
+                  className={`w-full p-2.5 rounded-lg text-left transition-colors flex items-center justify-between min-h-[52px] ${
                     isSelected
-                      ? 'bg-blue-50/80 dark:bg-blue-900/20 border-l-4 border-blue-600'
+                      ? 'theme-active-nav'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                   }`}
                 >
                   <div className="min-w-0 pr-2">
-                    <p className={`text-xs font-semibold truncate ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-slate-200'}`}>
+                    <p className={`text-xs font-semibold truncate ${isSelected ? 'theme-text' : 'text-slate-900 dark:text-slate-200'}`}>
                       {l.name}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -220,7 +302,7 @@ export const LedgersView: React.FC = () => {
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`text-xs font-mono font-bold ${isDebit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    <p className={`text-xs font-mono tabular-nums font-bold ${isDebit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {formatINR(Math.abs(l.currentBalance))}
                     </p>
                     <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
@@ -245,8 +327,9 @@ export const LedgersView: React.FC = () => {
               <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40">
                 {/* Mobile Back Button */}
                 <button
+                  type="button"
                   onClick={() => setMobileView('list')}
-                  className="lg:hidden flex items-center gap-1.5 text-xs text-blue-600 font-semibold mb-3 py-1"
+                  className="lg:hidden flex items-center gap-1.5 text-xs theme-text font-semibold mb-3 py-1"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Back to All Accounts</span>
@@ -254,26 +337,63 @@ export const LedgersView: React.FC = () => {
 
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                        {activeLedger.name}
-                      </h3>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                        {activeLedger.group}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-1.5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      {activeLedger.name}
+                    </h3>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{activeLedger.group}</span>
                       {activeLedger.gstin && (
-                        <span>GSTIN: <strong className="font-mono text-slate-700 dark:text-slate-300">{activeLedger.gstin}</strong></span>
+                        <span>
+                          · GSTIN: <strong className="font-mono text-slate-700 dark:text-slate-300">{activeLedger.gstin}</strong>
+                        </span>
                       )}
-                      {activeLedger.phone && <span>Ph: {activeLedger.phone}</span>}
+                      {activeLedger.phone && <span>· Ph: {activeLedger.phone}</span>}
                     </div>
 
                     {activeLedger.address && (
                       <p className="text-[11px] text-slate-500 mt-1">
                         {activeLedger.address}
                       </p>
+                    )}
+
+                    {!SYSTEM_LEDGER_DEFINITIONS.some(s => s.id === activeLedger.id) && (
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(activeLedger)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        {confirmDeleteId === activeLedger.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLedger(activeLedger.id)}
+                              className="px-2 py-1 text-[11px] font-bold bg-rose-600 text-white rounded-md"
+                            >
+                              Confirm Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(activeLedger.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-rose-600 hover:border-rose-200 dark:hover:border-rose-800"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -282,7 +402,7 @@ export const LedgersView: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">
                       Net Closing Balance
                     </span>
-                    <p className={`text-base font-bold font-mono mt-0.5 ${activeLedger.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    <p className={`text-base font-bold font-mono tabular-nums mt-0.5 ${activeLedger.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {formatINR(Math.abs(activeLedger.currentBalance))}
                     </p>
                     <span className="text-[10px] text-slate-500">
@@ -371,23 +491,36 @@ export const LedgersView: React.FC = () => {
         </div>
       </div>
 
-      {/* Create Ledger Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden my-8">
+      {/* Create / Edit Ledger Modal */}
+      {showModal && (
+        <div
+          onClick={() => setShowModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden my-8"
+          >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
               <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                Create New Ledger Account
+                {editingLedger ? 'Edit Ledger Account' : 'Create New Ledger Account'}
               </h3>
               <button
-                onClick={() => setShowAddModal(false)}
+                type="button"
+                onClick={() => setShowModal(false)}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateLedger} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSaveLedger} className="p-6 space-y-4 text-xs">
+              {ledgerError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                  {ledgerError}
+                </div>
+              )}
+
               <div>
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Account / Party Name *
@@ -398,7 +531,7 @@ export const LedgersView: React.FC = () => {
                   placeholder="e.g. Acme Industries Ltd"
                   value={newLedgerName}
                   onChange={e => setNewLedgerName(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -410,7 +543,7 @@ export const LedgersView: React.FC = () => {
                   <select
                     value={newLedgerGroup}
                     onChange={e => setNewLedgerGroup(e.target.value as LedgerGroup)}
-                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   >
                     <option value="Sundry Debtors">Sundry Debtors (Customer)</option>
                     <option value="Sundry Creditors">Sundry Creditors (Supplier)</option>
@@ -427,10 +560,10 @@ export const LedgersView: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="27AAACB1234F1Z8"
+                    placeholder="19AAACB1234F1Z8"
                     value={newGstin}
                     onChange={e => setNewGstin(e.target.value.toUpperCase())}
-                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
               </div>
@@ -445,21 +578,25 @@ export const LedgersView: React.FC = () => {
                     placeholder="+91 98765 43210"
                     value={newPhone}
                     onChange={e => setNewPhone(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    State Code (GST)
+                    State Jurisdiction
                   </label>
-                  <input
-                    type="text"
-                    placeholder="27"
+                  <select
                     value={newStateCode}
                     onChange={e => setNewStateCode(e.target.value)}
-                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-                  />
+                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                  >
+                    {INDIAN_STATES.map(st => (
+                      <option key={st.code} value={st.code}>
+                        {st.name} ({st.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -472,25 +609,27 @@ export const LedgersView: React.FC = () => {
                   placeholder="Street address, city, pin code..."
                   value={newAddress}
                   onChange={e => setNewAddress(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Opening Balance (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={newOpeningBal}
-                    onChange={e => setNewOpeningBal(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-                  />
-                </div>
+                {!editingLedger && (
+                  <div>
+                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Opening Balance (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={newOpeningBal}
+                      onChange={e => setNewOpeningBal(parseFloat(e.target.value) || 0)}
+                      className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                    />
+                  </div>
+                )}
 
-                <div>
+                <div className={editingLedger ? 'sm:col-span-2' : ''}>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Credit Limit (₹)
                   </label>
@@ -498,7 +637,7 @@ export const LedgersView: React.FC = () => {
                     type="number"
                     value={newCreditLimit}
                     onChange={e => setNewCreditLimit(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
               </div>
@@ -506,16 +645,16 @@ export const LedgersView: React.FC = () => {
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:text-slate-800 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-lg"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
                 >
-                  Save Account
+                  {editingLedger ? 'Save Changes' : 'Save Account'}
                 </button>
               </div>
             </form>

@@ -61,21 +61,23 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           {/* Sales vs Purchase Toggle */}
           <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
             <button
+              type="button"
               onClick={() => setActiveTab('SALE')}
               className={`px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-colors min-h-[32px] ${
                 activeTab === 'SALE'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               Sales
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('PURCHASE')}
               className={`px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-colors min-h-[32px] ${
                 activeTab === 'PURCHASE'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               Purchase
@@ -83,8 +85,9 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onOpenNewVoucher}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            className="flex items-center gap-1.5 px-3.5 py-2 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
           >
             <Plus className="w-4 h-4" />
             <span>+ Create {activeTab === 'SALE' ? 'Invoice' : 'Bill'}</span>
@@ -98,7 +101,7 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Taxable Value
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-slate-900 dark:text-slate-100 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1 truncate">
             {formatINR(totalTaxable)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">Net pre-tax sum</span>
@@ -108,7 +111,7 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             CGST + SGST
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-blue-600 dark:text-blue-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums theme-text mt-1 truncate">
             {formatINR(totalCgst + totalSgst)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">Intra-state Tax</span>
@@ -118,7 +121,7 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             IGST
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400 mt-1 truncate">
             {formatINR(totalIgst)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">Inter-state Tax</span>
@@ -128,7 +131,7 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Grand Total
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1 truncate">
             {formatINR(grandTotal)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">Inclusive of GST</span>
@@ -182,42 +185,43 @@ export const SalesPurchaseView: React.FC<SalesPurchaseViewProps> = ({
                     key={b.id}
                     className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {b.date}
                     </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-bold theme-text whitespace-nowrap">
                       {b.voucherNo}
                     </td>
                     <td className="py-2.5 px-3">
                       <p className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[200px]">
                         {b.partyName || 'Cash Customer'}
                       </p>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-400 tabular-nums">
                         {(b.items || []).length} items billed
                       </span>
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
                       {b.paymentMode}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {formatINR(b.subtotal)}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                       {b.cgstTotal > 0 ? formatINR(b.cgstTotal) : '-'}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                       {b.sgstTotal > 0 ? formatINR(b.sgstTotal) : '-'}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                       {b.igstTotal > 0 ? formatINR(b.igstTotal) : '-'}
                     </td>
-                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-950 dark:text-slate-100 whitespace-nowrap">
+                    <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-slate-950 dark:text-slate-100 whitespace-nowrap">
                       {formatINR(b.grandTotal)}
                     </td>
                     <td className="py-2.5 px-3 text-center whitespace-nowrap">
                       <button
+                        type="button"
                         onClick={() => onSelectVoucherForPrint(b)}
-                        className="px-2.5 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
+                        className="px-2.5 py-1 text-xs theme-soft-badge rounded font-medium hover:opacity-90"
                       >
                         Print
                       </button>

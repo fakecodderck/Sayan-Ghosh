@@ -1,13 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
-  collection,
   doc,
-  getDocs,
   setDoc,
   deleteDoc,
-  onSnapshot,
   getDocFromServer,
   writeBatch
 } from 'firebase/firestore';
@@ -22,6 +19,26 @@ import {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+/**
+ * Recursively strips `undefined` properties so Firestore never throws
+ * "Function setDoc() called with invalid data. Unsupported field value: undefined".
+ */
+export function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => stripUndefined(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        result[k] = stripUndefined(v);
+      }
+    }
+    return result as T;
+  }
+  return value;
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -52,10 +69,10 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
+      userId: auth.currentUser?.uid ?? null,
+      email: auth.currentUser?.email ?? null,
+      emailVerified: auth.currentUser?.emailVerified ?? null,
+      isAnonymous: auth.currentUser?.isAnonymous ?? null,
     },
     operationType,
     path,
@@ -70,25 +87,10 @@ export async function testConnection(): Promise<boolean> {
     return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is currently offline or unreachable.');
+      console.warn('Please check your Firebase configuration. Client is currently offline.');
     }
     return false;
   }
-}
-
-export const googleProvider = new GoogleAuthProvider();
-
-export async function signInWithGoogle() {
-  try {
-    return await signInWithPopup(auth, googleProvider);
-  } catch (error) {
-    console.error('Sign in failed:', error);
-    throw error;
-  }
-}
-
-export async function logOut() {
-  return await signOut(auth);
 }
 
 // Collection Helpers
@@ -96,14 +98,13 @@ export const Collections = {
   LEDGERS: 'ledgers',
   INVENTORY: 'inventory',
   VOUCHERS: 'vouchers',
-  BRANCHES: 'branches',
   SETTINGS: 'settings',
 };
 
-// Firestore CRUD operations with standardized error handling
+// Firestore CRUD operations with standardized error handling & undefined sanitization
 export async function saveLedgerToFirestore(ledger: LedgerAccount) {
   try {
-    await setDoc(doc(db, Collections.LEDGERS, ledger.id), ledger);
+    await setDoc(doc(db, Collections.LEDGERS, ledger.id), stripUndefined(ledger));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${Collections.LEDGERS}/${ledger.id}`);
   }
@@ -111,7 +112,7 @@ export async function saveLedgerToFirestore(ledger: LedgerAccount) {
 
 export async function saveInventoryItemToFirestore(item: InventoryItem) {
   try {
-    await setDoc(doc(db, Collections.INVENTORY, item.id), item);
+    await setDoc(doc(db, Collections.INVENTORY, item.id), stripUndefined(item));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${Collections.INVENTORY}/${item.id}`);
   }
@@ -119,7 +120,7 @@ export async function saveInventoryItemToFirestore(item: InventoryItem) {
 
 export async function saveVoucherToFirestore(voucher: TransactionVoucher) {
   try {
-    await setDoc(doc(db, Collections.VOUCHERS, voucher.id), voucher);
+    await setDoc(doc(db, Collections.VOUCHERS, voucher.id), stripUndefined(voucher));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${Collections.VOUCHERS}/${voucher.id}`);
   }
@@ -132,7 +133,6 @@ export async function deleteVoucherFromFirestore(voucherId: string) {
     handleFirestoreError(err, OperationType.DELETE, `${Collections.VOUCHERS}/${voucherId}`);
   }
 }
-
 
 export async function deleteLedgerFromFirestore(ledgerId: string) {
   try {
@@ -152,15 +152,37 @@ export async function deleteInventoryItemFromFirestore(itemId: string) {
 
 export async function saveSettingsToFirestore(settings: CompanySettings) {
   try {
-    await setDoc(doc(db, Collections.SETTINGS, settings.id), settings);
+    await setDoc(doc(db, Collections.SETTINGS, settings.id), stripUndefined(settings));
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${Collections.SETTINGS}/${settings.id}`);
   }
 }
 
 /**
+ * Batch-pushes local documents to Firestore when bootstrapping an empty cloud collection.
+ */
+export async function batchSeedDocumentsToFirestore<T extends { id: string }>(
+  collectionName: string,
+  docsList: T[]
+) {
+  if (docsList.length === 0) return;
+  try {
+    // Firestore writeBatch supports up to 500 ops per batch
+    for (let i = 0; i < docsList.length; i += 400) {
+      const chunk = docsList.slice(i, i + 400);
+      const batch = writeBatch(db);
+      for (const entry of chunk) {
+        batch.set(doc(db, collectionName, entry.id), stripUndefined(entry));
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, collectionName);
+  }
+}
+
+/**
  * Atomically commits a transaction voucher, its affected inventory items, and its affected ledgers.
- * If any single write fails, the entire batch aborts cleanly.
  */
 export async function commitVoucherAtomicBatch(
   voucher: TransactionVoucher,
@@ -170,20 +192,17 @@ export async function commitVoucherAtomicBatch(
   try {
     const batch = writeBatch(db);
 
-    // 1. Write the voucher document
     const voucherRef = doc(db, Collections.VOUCHERS, voucher.id);
-    batch.set(voucherRef, voucher);
+    batch.set(voucherRef, stripUndefined(voucher));
 
-    // 2. Write all updated inventory stock documents
     for (const item of updatedItems) {
       const itemRef = doc(db, Collections.INVENTORY, item.id);
-      batch.set(itemRef, item);
+      batch.set(itemRef, stripUndefined(item));
     }
 
-    // 3. Write all updated ledger balance documents
     for (const ledger of updatedLedgers) {
       const ledgerRef = doc(db, Collections.LEDGERS, ledger.id);
-      batch.set(ledgerRef, ledger);
+      batch.set(ledgerRef, stripUndefined(ledger));
     }
 
     await batch.commit();
@@ -193,7 +212,7 @@ export async function commitVoucherAtomicBatch(
 }
 
 /**
- * Atomically deletes a voucher and restores affected inventory items and ledgers to their pre-voucher states.
+ * Atomically deletes a voucher and restores affected inventory items and ledgers.
  */
 export async function revertVoucherAtomicBatch(
   voucherId: string,
@@ -203,20 +222,17 @@ export async function revertVoucherAtomicBatch(
   try {
     const batch = writeBatch(db);
 
-    // 1. Delete voucher
     const voucherRef = doc(db, Collections.VOUCHERS, voucherId);
     batch.delete(voucherRef);
 
-    // 2. Revert inventory items
     for (const item of restoredItems) {
       const itemRef = doc(db, Collections.INVENTORY, item.id);
-      batch.set(itemRef, item);
+      batch.set(itemRef, stripUndefined(item));
     }
 
-    // 3. Revert ledgers
     for (const ledger of restoredLedgers) {
       const ledgerRef = doc(db, Collections.LEDGERS, ledger.id);
-      batch.set(ledgerRef, ledger);
+      batch.set(ledgerRef, stripUndefined(ledger));
     }
 
     await batch.commit();
@@ -224,4 +240,3 @@ export async function revertVoucherAtomicBatch(
     handleFirestoreError(err, OperationType.DELETE, `${Collections.VOUCHERS}/${voucherId}`);
   }
 }
-

@@ -1,18 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Settings,
   Building,
   CreditCard,
   FileText,
   Save,
   RotateCcw,
   CheckCircle2,
-  ShieldCheck,
   Palette,
   Check
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { CompanySettings, INDIAN_STATES, ThemeColor } from '../types/accounting';
+import { CompanySettings, INDIAN_STATES } from '../types/accounting';
 import { THEME_PRESETS, applyThemeColor, getThemePreset } from '../utils/theme';
 
 export const SettingsView: React.FC = () => {
@@ -20,6 +18,12 @@ export const SettingsView: React.FC = () => {
 
   const [form, setForm] = useState<CompanySettings>(settings);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  useEffect(() => {
+    setForm(settings);
+  }, [settings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,24 +42,24 @@ export const SettingsView: React.FC = () => {
     }));
   };
 
-  const handleReset = () => {
-    if (confirm('Reset all ledger data, stock, and vouchers back to default demo records?')) {
-      resetToSampleData();
-      alert('Application reset to initial wholesale & distribution demo data.');
-    }
+  const handleConfirmReset = async () => {
+    await resetToSampleData();
+    setShowResetConfirm(false);
+    setResetSuccess(true);
+    setTimeout(() => setResetSuccess(false), 3000);
   };
 
   const currentPreset = getThemePreset(form.themeColor || 'blue');
+  const brandInitial = (form.name || 'G').trim().charAt(0).toUpperCase();
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* View Header */}
       <div>
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           Business Profile, Theme &amp; GST Configuration
         </h2>
         <p className="text-xs text-slate-500 mt-0.5">
-          Customise website UI color theme, master company GSTIN, banking details, and invoice terms
+          Customise UI color theme, master company GSTIN, banking/UPI details, and invoice terms
         </p>
       </div>
 
@@ -66,17 +70,24 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
+      {resetSuccess && (
+        <div className="p-3 theme-soft-badge rounded-xl flex items-center gap-2.5 text-xs">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>Local records cleared back to clean starter configuration.</span>
+        </div>
+      )}
+
       <form onSubmit={handleSave} className="space-y-6 text-xs">
         {/* UI Color Theme Customization */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Palette className="w-4 h-4 text-blue-600" />
+            <Palette className="w-4 h-4 theme-text" />
             <div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                 Website UI Color Theme &amp; Brand Accent
               </h3>
               <p className="text-[11px] text-slate-500">
-                Choose your preferred accent color for buttons, active navigation, badges, and headers
+                Choose your preferred accent color for buttons and active navigation
               </p>
             </div>
           </div>
@@ -92,9 +103,9 @@ export const SettingsView: React.FC = () => {
                     setForm(prev => ({ ...prev, themeColor: preset.id }));
                     applyThemeColor(preset.id);
                   }}
-                  className={`p-3 rounded-xl border-2 text-left transition-all relative flex flex-col gap-2 min-h-[90px] ${
+                  className={`p-3 rounded-xl border text-left transition-all relative flex flex-col gap-2 min-h-[84px] ${
                     isSelected
-                      ? 'border-blue-600 dark:border-blue-400 bg-slate-50 dark:bg-slate-800/80 shadow-xs'
+                      ? 'border-slate-900 dark:border-white bg-slate-50 dark:bg-slate-800/80 shadow-xs'
                       : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
                   }`}
                 >
@@ -106,7 +117,7 @@ export const SettingsView: React.FC = () => {
                       {isSelected && <Check className="w-3.5 h-3.5" />}
                     </div>
                     {isSelected && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-600 text-white">
+                      <span className="text-[10px] font-bold theme-text">
                         Active
                       </span>
                     )}
@@ -124,14 +135,13 @@ export const SettingsView: React.FC = () => {
             })}
           </div>
 
-          {/* Theme Live Preview Banner */}
           <div className="mt-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div
                 className="w-8 h-8 rounded-lg text-white font-bold flex items-center justify-center shadow-xs text-sm"
                 style={{ backgroundColor: currentPreset.primaryHex }}
               >
-                A
+                {brandInitial}
               </div>
               <div>
                 <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
@@ -142,30 +152,13 @@ export const SettingsView: React.FC = () => {
                 </span>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <span
-                className="px-2.5 py-1 rounded text-xs font-bold text-white shadow-xs"
-                style={{ backgroundColor: currentPreset.primaryHex }}
-              >
-                Sample Button
-              </span>
-              <span
-                className="px-2.5 py-1 rounded text-xs font-semibold"
-                style={{
-                  backgroundColor: currentPreset.lightHex,
-                  color: currentPreset.primaryHex,
-                }}
-              >
-                Active Badge
-              </span>
-            </div>
           </div>
         </div>
+
         {/* Business Legal Identity */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <Building className="w-4 h-4 text-blue-600" />
+            <Building className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
               Company &amp; Statutory GST Details
             </h3>
@@ -256,9 +249,9 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Banking and Digital UPI Details */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <CreditCard className="w-4 h-4 text-blue-600" />
+            <CreditCard className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
               Banking &amp; UPI QR Code Details (For Customer Invoices)
             </h3>
@@ -330,9 +323,9 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Invoice Terms & Signatory */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <FileText className="w-4 h-4 text-blue-600" />
+            <FileText className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
               Invoice Terms, Conditions &amp; Signatory
             </h3>
@@ -364,19 +357,41 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-medium border border-rose-200 dark:border-rose-900 transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo Records</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          {!showResetConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-medium border border-rose-200 dark:border-rose-900 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear Local Data</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+              <span className="text-rose-700 dark:text-rose-300 font-medium">
+                Reset local cache?
+              </span>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                className="px-2.5 py-1 bg-rose-600 text-white rounded font-bold"
+              >
+                Confirm Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-2 py-1 text-slate-600 dark:text-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
 
           <button
             type="submit"
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-xs"
+            className="flex items-center gap-2 px-5 py-2.5 theme-bg theme-bg-hover text-white font-semibold rounded-lg shadow-xs transition-colors text-xs"
           >
             <Save className="w-4 h-4" />
             <span>Save Configuration Changes</span>

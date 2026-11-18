@@ -36,20 +36,32 @@ export const GSTRReportsView: React.FC = () => {
   } = gstr3b;
 
   const downloadCSV = () => {
-    let csvContent = 'data:text/csv;charset=utf-8,';
-    csvContent += 'HSN,Description,Unit,Total Quantity,Taxable Value,GST Rate,CGST,SGST,IGST,Total Tax\n';
-
-    gstr1.hsnSummary.forEach(row => {
-      csvContent += `"${row.hsn}","${row.description}","${row.unit}",${row.totalQty},${row.taxableValue},${row.gstRate}%,${row.cgst},${row.sgst},${row.igst},${row.totalTax}\n`;
-    });
-
-    const encodedUri = encodeURI(csvContent);
+    const header = 'HSN,Description,Unit,Total Quantity,Taxable Value,GST Rate,CGST,SGST,IGST,Total Tax';
+    const escapeCsv = (val: string | number) => `"${String(val).replace(/"/g, '""')}"`;
+    const rows = gstr1.hsnSummary.map(row =>
+      [
+        escapeCsv(row.hsn),
+        escapeCsv(row.description),
+        escapeCsv(row.unit),
+        row.totalQty,
+        row.taxableValue,
+        `${row.gstRate}%`,
+        row.cgst,
+        row.sgst,
+        row.igst,
+        row.totalTax,
+      ].join(',')
+    );
+    const csvContent = [header, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `GSTR1_HSN_Summary_${settings.gstin}.csv`);
+    link.href = url;
+    link.setAttribute('download', `GSTR1_HSN_Summary_${settings.gstin || 'report'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -68,21 +80,23 @@ export const GSTRReportsView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
             <button
+              type="button"
               onClick={() => setActiveTab('GSTR1')}
               className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 activeTab === 'GSTR1'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               GSTR-1 (Outward Sales &amp; HSN)
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('GSTR3B')}
               className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 activeTab === 'GSTR3B'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               GSTR-3B (Monthly Summary &amp; ITC)
@@ -90,8 +104,9 @@ export const GSTRReportsView: React.FC = () => {
           </div>
 
           <button
+            type="button"
             onClick={downloadCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -107,7 +122,7 @@ export const GSTRReportsView: React.FC = () => {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Total Taxable Turnover
               </p>
-              <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-1">
+              <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
                 {formatINR(gstr1.totalTaxable)}
               </p>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -119,7 +134,7 @@ export const GSTRReportsView: React.FC = () => {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 CGST + SGST (Central/State)
               </p>
-              <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+              <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
                 {formatINR(gstr1.totalCgst + gstr1.totalSgst)}
               </p>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -131,7 +146,7 @@ export const GSTRReportsView: React.FC = () => {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 IGST (Integrated Tax)
               </p>
-              <p className="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1">
+              <p className="text-xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400 mt-1">
                 {formatINR(gstr1.totalIgst)}
               </p>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -143,7 +158,7 @@ export const GSTRReportsView: React.FC = () => {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Total Output GST Liability
               </p>
-              <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className="text-xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
                 {formatINR(gstr1.totalTax)}
               </p>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -158,7 +173,7 @@ export const GSTRReportsView: React.FC = () => {
               <h4 className="text-xs font-bold uppercase text-slate-800 dark:text-slate-200">
                 Table 4: B2B Invoices (With GSTIN)
               </h4>
-              <div className="mt-2 space-y-1 font-mono text-xs">
+              <div className="mt-2 space-y-1 font-mono tabular-nums text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Count:</span>
                   <span className="font-bold text-slate-900 dark:text-slate-100">{gstr1.b2bInvoicesCount}</span>
@@ -169,7 +184,7 @@ export const GSTRReportsView: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Tax:</span>
-                  <span className="font-semibold text-blue-600">{formatINR(gstr1.b2bTaxAmount)}</span>
+                  <span className="font-semibold theme-text">{formatINR(gstr1.b2bTaxAmount)}</span>
                 </div>
               </div>
             </div>
@@ -178,7 +193,7 @@ export const GSTRReportsView: React.FC = () => {
               <h4 className="text-xs font-bold uppercase text-slate-800 dark:text-slate-200">
                 Table 7: B2C Invoices (Retail)
               </h4>
-              <div className="mt-2 space-y-1 font-mono text-xs">
+              <div className="mt-2 space-y-1 font-mono tabular-nums text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Count:</span>
                   <span className="font-bold text-slate-900 dark:text-slate-100">{gstr1.b2cInvoicesCount}</span>
@@ -189,7 +204,7 @@ export const GSTRReportsView: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Tax:</span>
-                  <span className="font-semibold text-blue-600">{formatINR(gstr1.b2cTaxAmount)}</span>
+                  <span className="font-semibold theme-text">{formatINR(gstr1.b2cTaxAmount)}</span>
                 </div>
               </div>
             </div>
@@ -198,7 +213,7 @@ export const GSTRReportsView: React.FC = () => {
               <h4 className="text-xs font-bold uppercase text-slate-800 dark:text-slate-200">
                 Table 9B: Credit / Debit Notes
               </h4>
-              <div className="mt-2 space-y-1 font-mono text-xs">
+              <div className="mt-2 space-y-1 font-mono tabular-nums text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Count:</span>
                   <span className="font-bold text-slate-900 dark:text-slate-100">{gstr1.creditNotesCount}</span>
@@ -244,7 +259,7 @@ export const GSTRReportsView: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono tabular-nums">
                   {gstr1.hsnSummary.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="py-12 text-center text-slate-400 font-sans">
@@ -254,7 +269,7 @@ export const GSTRReportsView: React.FC = () => {
                   ) : (
                     gstr1.hsnSummary.map((row, i) => (
                       <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <td className="py-2.5 px-4 font-bold text-blue-600 dark:text-blue-400">
+                        <td className="py-2.5 px-4 font-bold theme-text">
                           {row.hsn}
                         </td>
                         <td className="py-2.5 px-3 font-sans font-medium text-slate-900 dark:text-slate-200">
@@ -302,7 +317,7 @@ export const GSTRReportsView: React.FC = () => {
 
             {/* Table 3.1 & 4.0 Comparison */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs font-mono">
+              <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
                 <thead>
                   <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px]">
                     <th className="py-3 px-4">Tax Component</th>
@@ -350,7 +365,7 @@ export const GSTRReportsView: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-right">{formatINR(gstr1.totalTax)}</td>
                     <td className="py-3 px-4 text-right text-emerald-600">{formatINR(totalItc)}</td>
-                    <td className="py-3 px-4 text-right text-blue-600 dark:text-blue-400">
+                    <td className="py-3 px-4 text-right theme-text">
                       {formatINR(netTotalPayable)}
                     </td>
                   </tr>

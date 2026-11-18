@@ -40,8 +40,9 @@ export const ProfitLossView: React.FC = () => {
         </div>
 
         <button
+          type="button"
           onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg transition-colors border border-slate-200 dark:border-slate-700 min-h-[40px]"
+          className="no-print flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg transition-colors border border-slate-200 dark:border-slate-700 min-h-[40px]"
         >
           <Printer className="w-3.5 h-3.5" />
           <span>Print P&amp;L Statement</span>
@@ -54,10 +55,10 @@ export const ProfitLossView: React.FC = () => {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Net Sales Revenue
           </p>
-          <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
             {formatINR(report.netSales)}
           </p>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
+          <span className="text-[10px] text-slate-400 tabular-nums mt-0.5 block">
             Gross {formatINR(report.grossSales)} - Returns {formatINR(report.salesReturns)}
           </span>
         </div>
@@ -66,7 +67,7 @@ export const ProfitLossView: React.FC = () => {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Cost of Goods Sold (COGS)
           </p>
-          <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
             {formatINR(report.costOfGoodsSold)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -78,7 +79,7 @@ export const ProfitLossView: React.FC = () => {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Gross Profit (Margin: {report.grossProfitMargin.toFixed(1)}%)
           </p>
-          <p className={`text-xl font-bold font-mono mt-1 ${isGrossProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+          <p className={`text-xl font-bold font-mono tabular-nums mt-1 ${isGrossProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
             {formatINR(report.grossProfit)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -90,7 +91,7 @@ export const ProfitLossView: React.FC = () => {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Net Operating Profit ({report.netProfitMargin.toFixed(1)}%)
           </p>
-          <p className={`text-xl font-bold font-mono mt-1 ${isNetProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+          <p className={`text-xl font-bold font-mono tabular-nums mt-1 ${isNetProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
             {formatINR(report.netProfit)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -110,7 +111,7 @@ export const ProfitLossView: React.FC = () => {
             <span className="text-[11px] font-mono text-slate-500">Amount (₹)</span>
           </div>
 
-          <div className="p-4 space-y-4 text-xs font-mono">
+          <div className="p-4 space-y-4 text-xs font-mono tabular-nums">
             {/* Trading Section */}
             <div>
               <p className="font-bold text-[11px] uppercase tracking-wider text-slate-400 font-sans pb-1 border-b border-slate-100 dark:border-slate-800">
@@ -176,7 +177,7 @@ export const ProfitLossView: React.FC = () => {
             <span className="text-[11px] font-mono text-slate-500">Amount (₹)</span>
           </div>
 
-          <div className="p-4 space-y-4 text-xs font-mono">
+          <div className="p-4 space-y-4 text-xs font-mono tabular-nums">
             {/* Trading Section */}
             <div>
               <p className="font-bold text-[11px] uppercase tracking-wider text-slate-400 font-sans pb-1 border-b border-slate-100 dark:border-slate-800">

@@ -1,37 +1,24 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeft,
-  Boxes,
   Plus,
-  Minus,
   Edit2,
   Trash2,
-  Calendar,
   Search,
-  Filter,
-  AlertTriangle,
-  PackageCheck,
-  TrendingUp,
-  TrendingDown,
-  X,
-  FileCheck
+  X
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { InventoryItem, UnitType } from '../types/accounting';
+import { UnitType } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 
 interface StockItemRegisterViewProps {
   itemId: string;
   onBack: () => void;
-  onOpenNewPurchase?: () => void;
-  onOpenNewSale?: () => void;
 }
 
 export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
   itemId,
   onBack,
-  onOpenNewPurchase,
-  onOpenNewSale,
 }) => {
   const {
     inventory,
@@ -47,6 +34,8 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
   const [filterType, setFilterType] = useState<string>('ALL');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [adjustQty, setAdjustQty] = useState<number>(0);
   const [adjustReason, setAdjustReason] = useState('Stock Count Verification');
 
@@ -59,6 +48,18 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
   const [editPrice, setEditPrice] = useState(item?.sellingPrice || 0);
   const [editGst, setEditGst] = useState(item?.gstRate || 18);
   const [editMinAlert, setEditMinAlert] = useState(item?.minStockAlert || 10);
+
+  useEffect(() => {
+    if (!showEditModal && !showAdjustModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowEditModal(false);
+        setShowAdjustModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showEditModal, showAdjustModal]);
 
   // Compute item ledger history by traversing vouchers
   const movementRows = useMemo(() => {
@@ -141,8 +142,9 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
       <div className="p-8 text-center space-y-4">
         <p className="text-slate-500">Item not found or has been deleted.</p>
         <button
+          type="button"
           onClick={onBack}
-          className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg"
+          className="px-4 py-2 theme-bg theme-bg-hover text-white text-xs font-semibold rounded-lg"
         >
           Back to Stock Registry
         </button>
@@ -156,24 +158,31 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateInventoryItem({
-      ...item,
-      name: editName.trim(),
-      sku: editSku.trim(),
-      hsnCode: editHsn.trim(),
-      unit: editUnit,
-      purchasePrice: Number(editCost) || 0,
-      sellingPrice: Number(editPrice) || 0,
-      gstRate: Number(editGst) || 18,
-      minStockAlert: Number(editMinAlert) || 10,
-    });
-    setShowEditModal(false);
+    setEditError(null);
+    try {
+      await updateInventoryItem({
+        ...item,
+        name: editName.trim(),
+        sku: editSku.trim(),
+        hsnCode: editHsn.trim(),
+        unit: editUnit,
+        purchasePrice: Number(editCost) || 0,
+        sellingPrice: Number(editPrice) || 0,
+        gstRate: Number(editGst) || 18,
+        minStockAlert: Number(editMinAlert) || 10,
+      });
+      setShowEditModal(false);
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update product');
+    }
   };
 
-  const handleDeleteItem = async () => {
-    if (confirm(`Are you sure you want to delete ${item.name}? This action cannot be undone.`)) {
+  const handleConfirmDelete = async () => {
+    try {
       await deleteInventoryItem(item.id);
       onBack();
+    } catch {
+      setConfirmDelete(false);
     }
   };
 
@@ -214,6 +223,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={() => setShowAdjustModal(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors min-h-[38px]"
           >
@@ -221,7 +231,9 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
             <span>Stock Adjustment</span>
           </button>
           <button
+            type="button"
             onClick={() => {
+              setEditError(null);
               setEditName(item.name);
               setEditSku(item.sku);
               setEditHsn(item.hsnCode);
@@ -232,18 +244,38 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
               setEditMinAlert(item.minStockAlert);
               setShowEditModal(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold rounded-lg transition-colors border border-blue-200 dark:border-blue-900 min-h-[38px]"
+            className="flex items-center gap-1.5 px-3 py-2 theme-soft-badge hover:opacity-90 text-xs font-semibold rounded-lg transition-colors min-h-[38px]"
           >
             <Edit2 className="w-3.5 h-3.5" />
             <span>Edit Product</span>
           </button>
-          <button
-            onClick={handleDeleteItem}
-            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-semibold rounded-lg transition-colors border border-rose-200 dark:border-rose-900 min-h-[38px]"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
-          </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-2 py-1">
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded"
+              >
+                Confirm Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-xs font-semibold rounded-lg transition-colors border border-rose-200 dark:border-rose-900 min-h-[38px]"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -253,7 +285,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Current Stock On-Hand
           </p>
-          <p className={`text-xl font-bold font-mono mt-1 ${isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}`}>
+          <p className={`text-xl font-bold font-mono tabular-nums mt-1 ${isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100'}`}>
             {currentStock} {item.unit}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -265,7 +297,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Stock Asset Valuation
           </p>
-          <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
             {formatINR(totalValuation)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -313,8 +345,8 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
           </span>
         </div>
         <div>
-          <span className="text-slate-400 block text-[10px] uppercase font-semibold">Gross Margin</span>
-          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm">
+          <span className="text-[10px] text-slate-400 block uppercase font-semibold">Gross Margin</span>
+          <span className="font-mono tabular-nums font-bold theme-text text-sm">
             {item.sellingPrice > 0 ? (((item.sellingPrice - item.purchasePrice) / item.sellingPrice) * 100).toFixed(1) : 0}%
           </span>
         </div>
@@ -443,15 +475,22 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
 
       {/* Quick Adjust Modal */}
       {showAdjustModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4">
+        <div
+          onClick={() => setShowAdjustModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4"
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Adjust Physical Stock Count
               </h3>
               <button
+                type="button"
                 onClick={() => setShowAdjustModal(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -474,9 +513,9 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
                   placeholder="e.g. +20 or -5"
                   value={adjustQty || ''}
                   onChange={e => setAdjustQty(parseFloat(e.target.value) || 0)}
-                  className="flex-1 p-2 text-sm font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="flex-1 p-2 text-sm font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
-                <span className="text-xs font-medium text-slate-600">{item.unit}</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.unit}</span>
               </div>
               <span className="text-[10px] text-slate-400 block mt-1">
                 Positive for incoming stock, negative for damaged/scrap.
@@ -491,20 +530,22 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
                 type="text"
                 value={adjustReason}
                 onChange={e => setAdjustReason(e.target.value)}
-                className="w-full p-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                className="w-full p-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setShowAdjustModal(false)}
-                className="px-3.5 py-2 text-xs text-slate-600 bg-slate-100 rounded-lg"
+                className="px-3.5 py-2 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleApplyAdjustment}
-                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                className="px-4 py-2 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
               >
                 Apply Stock Adjustment
               </button>
@@ -515,21 +556,33 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
 
       {/* Edit Product Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8">
+        <div
+          onClick={() => setShowEditModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8"
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Edit Product Details
               </h3>
               <button
+                type="button"
                 onClick={() => setShowEditModal(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              {editError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                  {editError}
+                </div>
+              )}
               <div>
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Product Name *
@@ -650,13 +703,13 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="px-3.5 py-2 text-slate-600 bg-slate-100 rounded-lg"
+                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg"
                 >
                   Save Changes
                 </button>

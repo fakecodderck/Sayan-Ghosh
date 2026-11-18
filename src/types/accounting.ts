@@ -63,6 +63,16 @@ export type VoucherType =
 
 export type PaymentMode = 'CASH' | 'BANK' | 'UPI' | 'CREDIT';
 
+export type CustomerMode = 'existing' | 'new' | 'guest';
+
+export interface GuestCustomerDetails {
+  name?: string;
+  phone?: string;
+  address?: string;
+  gstin?: string;
+  stateCode?: string;
+}
+
 export interface VoucherLineItem {
   itemId: string;
   name: string;
@@ -97,6 +107,8 @@ export interface TransactionVoucher {
   type: VoucherType;
   partyId?: string; // Links to Customer or Company (LedgerAccount)
   partyName?: string;
+  customerMode?: CustomerMode;
+  guestDetails?: GuestCustomerDetails;
   isGstBill: boolean; // true = with GST, false = without GST (Non-GST / Bill of Supply)
   isGstInclusive?: boolean; // true = entered unit rates are inclusive of GST
   paymentMode: PaymentMode;
@@ -115,6 +127,52 @@ export interface TransactionVoucher {
 }
 
 export type ThemeColor = 'blue' | 'emerald' | 'indigo' | 'amber' | 'rose' | 'purple' | 'slate';
+
+// Drag-and-Drop Custom Invoice Builder Schema
+export type InvoiceBlockType =
+  | 'company_header'
+  | 'invoice_meta'
+  | 'bill_to'
+  | 'dispatch_info'
+  | 'items_table'
+  | 'totals_box'
+  | 'amount_words'
+  | 'hsn_summary'
+  | 'bank_qr'
+  | 'terms_signatory'
+  | 'custom_text'
+  | 'divider';
+
+export interface InvoiceBlockConfig {
+  id: string;
+  type: InvoiceBlockType;
+  label: string;
+  visible: boolean;
+  align?: 'left' | 'center' | 'right';
+  customHeading?: string;
+  customBody?: string;
+  // Optional flags depending on block type
+  showHsnColumn?: boolean;
+  showDiscountColumn?: boolean;
+  showTaxColumn?: boolean;
+  showUnitColumn?: boolean;
+  showQrCode?: boolean;
+  showBankDetails?: boolean;
+  compact?: boolean;
+}
+
+export interface InvoiceTemplateConfig {
+  id: string;
+  name: string;
+  paperSize: 'A5' | 'A4';
+  accentColor: string;
+  fontFamily: 'sans' | 'mono' | 'serif';
+  borderStyle: 'sharp' | 'rounded' | 'minimal';
+  density: 'compact' | 'comfortable';
+  blocks: InvoiceBlockConfig[];
+  useAsDefault: boolean;
+  updatedAt?: string;
+}
 
 export interface CompanySettings {
   id: string;
@@ -135,6 +193,7 @@ export interface CompanySettings {
   showQrCode: boolean;
   authorizedSignatoryTitle: string;
   themeColor?: ThemeColor;
+  invoiceTemplate?: InvoiceTemplateConfig;
   updatedAt?: string;
 }
 

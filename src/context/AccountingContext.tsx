@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import {
   CompanySettings,
   InventoryItem,
@@ -14,7 +13,7 @@ import {
   initialVouchers
 } from '../data/seedData';
 import {
-  auth,
+  batchSeedDocumentsToFirestore,
   Collections,
   commitVoucherAtomicBatch,
   db,
@@ -47,9 +46,10 @@ interface AccountingContextType {
   settings: CompanySettings;
   dateFilter: DateFilter;
   setDateFilter: (filter: DateFilter) => void;
-  user: User | null;
   isFirebaseConnected: boolean;
   isSyncing: boolean;
+  lastError: string | null;
+  clearError: () => void;
 
   // Actions
   addVoucher: (voucher: Omit<TransactionVoucher, 'id'>) => Promise<string>;
@@ -74,14 +74,18 @@ const LOCAL_STORAGE_KEYS = {
   LEDGERS: 'apex_ledgers_v4',
   INVENTORY: 'apex_inventory_v4',
   SETTINGS: 'apex_settings_v4',
+  SYNCED_VOUCHERS: 'apex_synced_vouchers_v1',
+  SYNCED_LEDGERS: 'apex_synced_ledgers_v1',
+  SYNCED_INVENTORY: 'apex_synced_inventory_v1',
+  SYNCED_SETTINGS: 'apex_synced_settings_v1',
 };
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const clearError = () => setLastError(null);
 
-  // Initialize with clean local data and ensured system chart of accounts
   const [vouchers, setVouchers] = useState<TransactionVoucher[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.VOUCHERS);
@@ -124,7 +128,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     endDate: new Date().toISOString().split('T')[0],
   });
 
-  // Local storage persistence backup
+  // Keep refs of latest local state for initial one-time cloud bootstrap
+  const latestVouchersRef = useRef(vouchers);
+  latestVouchersRef.current = vouchers;
+  const latestLedgersRef = useRef(ledgers);
+  latestLedgersRef.current = ledgers;
+  const latestInventoryRef = useRef(inventory);
+  latestInventoryRef.current = inventory;
+  const latestSettingsRef = useRef(settings);
+  latestSettingsRef.current = settings;
+
+  // Local storage persistence backup (instant offline/cache recovery)
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.VOUCHERS, JSON.stringify(vouchers));
   }, [vouchers]);
@@ -141,36 +155,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
 
-  // Auth & Connection Check
+  // Direct passwordless Firebase Firestore real-time synchronization
   useEffect(() => {
     testConnection().then(connected => {
       setIsFirebaseConnected(connected);
     });
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async currentUser => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        // Attempt anonymous sign-in gracefully if enabled, otherwise fallback to guest mode
-        try {
-          const anon = await signInAnonymously(auth);
-          setUser(anon.user);
-        } catch {
-          // Anonymous authentication not enabled on this project; proceed in secure offline/local mode
-          setUser(null);
-        }
-      }
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  // Listen to Firestore real-time updates ONLY when authenticated
-  useEffect(() => {
-    if (!user) {
-      setIsSyncing(false);
-      return;
-    }
 
     setIsSyncing(true);
 
@@ -179,14 +168,41 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       snapshot => {
         const cloudVouchers: TransactionVoucher[] = [];
         snapshot.forEach(docSnap => cloudVouchers.push(docSnap.data() as TransactionVoucher));
-        if (cloudVouchers.length > 0) {
+        cloudVouchers.sort((a, b) => {
+          const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+          if (dateDiff !== 0) return dateDiff;
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+
+        const hasSyncedBefore = localStorage.getItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS) === 'true';
+        if (
+          !snapshot.metadata.fromCache &&
+          cloudVouchers.length === 0 &&
+          !hasSyncedBefore &&
+          latestVouchersRef.current.length > 0
+        ) {
+          // Migrate any pre-existing local vouchers up to Firebase on first connection
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS, 'true');
+          batchSeedDocumentsToFirestore(Collections.VOUCHERS, latestVouchersRef.current).catch(err =>
+            console.warn('Initial voucher migration failed:', err)
+          );
+        } else if (cloudVouchers.length > 0 || !snapshot.metadata.fromCache) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS, 'true');
           setVouchers(cloudVouchers);
+        }
+
+        if (!snapshot.metadata.fromCache) {
+          setIsFirebaseConnected(true);
         }
         setIsSyncing(false);
       },
       error => {
-        console.warn('Vouchers sync info:', error.message);
         setIsSyncing(false);
+        try {
+          handleFirestoreError(error, OperationType.GET, Collections.VOUCHERS);
+        } catch {
+          // Structured error already logged
+        }
       }
     );
 
@@ -195,12 +211,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       snapshot => {
         const cloudLedgers: LedgerAccount[] = [];
         snapshot.forEach(docSnap => cloudLedgers.push(docSnap.data() as LedgerAccount));
-        if (cloudLedgers.length > 0) {
-          setLedgers(ensureSystemLedgers(cloudLedgers, user.uid));
+
+        const hasSyncedBefore = localStorage.getItem(LOCAL_STORAGE_KEYS.SYNCED_LEDGERS) === 'true';
+        if (
+          !snapshot.metadata.fromCache &&
+          cloudLedgers.length === 0 &&
+          !hasSyncedBefore &&
+          latestLedgersRef.current.length > 0
+        ) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_LEDGERS, 'true');
+          batchSeedDocumentsToFirestore(Collections.LEDGERS, latestLedgersRef.current).catch(err =>
+            console.warn('Initial ledger migration failed:', err)
+          );
+        } else if (cloudLedgers.length > 0 || !snapshot.metadata.fromCache) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_LEDGERS, 'true');
+          setLedgers(ensureSystemLedgers(cloudLedgers, latestSettingsRef.current.id));
         }
       },
       error => {
-        console.warn('Ledgers sync info:', error.message);
+        try {
+          handleFirestoreError(error, OperationType.GET, Collections.LEDGERS);
+        } catch {
+          // Structured error already logged
+        }
       }
     );
 
@@ -209,12 +242,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       snapshot => {
         const cloudInventory: InventoryItem[] = [];
         snapshot.forEach(docSnap => cloudInventory.push(docSnap.data() as InventoryItem));
-        if (cloudInventory.length > 0) {
+
+        const hasSyncedBefore = localStorage.getItem(LOCAL_STORAGE_KEYS.SYNCED_INVENTORY) === 'true';
+        if (
+          !snapshot.metadata.fromCache &&
+          cloudInventory.length === 0 &&
+          !hasSyncedBefore &&
+          latestInventoryRef.current.length > 0
+        ) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_INVENTORY, 'true');
+          batchSeedDocumentsToFirestore(Collections.INVENTORY, latestInventoryRef.current).catch(err =>
+            console.warn('Initial inventory migration failed:', err)
+          );
+        } else if (cloudInventory.length > 0 || !snapshot.metadata.fromCache) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_INVENTORY, 'true');
           setInventory(cloudInventory);
         }
       },
       error => {
-        console.warn('Inventory sync info:', error.message);
+        try {
+          handleFirestoreError(error, OperationType.GET, Collections.INVENTORY);
+        } catch {
+          // Structured error already logged
+        }
       }
     );
 
@@ -222,14 +272,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       collection(db, Collections.SETTINGS),
       snapshot => {
         if (!snapshot.empty) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_SETTINGS, 'true');
           const firstSettingDoc = snapshot.docs[0].data() as CompanySettings;
           if (firstSettingDoc && firstSettingDoc.name) {
             setSettings(firstSettingDoc);
           }
+        } else if (
+          !snapshot.metadata.fromCache &&
+          localStorage.getItem(LOCAL_STORAGE_KEYS.SYNCED_SETTINGS) !== 'true'
+        ) {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_SETTINGS, 'true');
+          saveSettingsToFirestore(latestSettingsRef.current).catch(err =>
+            console.warn('Initial settings seed failed:', err)
+          );
         }
       },
       error => {
-        console.warn('Settings sync info:', error.message);
+        try {
+          handleFirestoreError(error, OperationType.GET, Collections.SETTINGS);
+        } catch {
+          // Structured error already logged
+        }
       }
     );
 
@@ -239,21 +302,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       unsubInventory();
       unsubSettings();
     };
-  }, [user]);
+  }, []);
 
   // Helpers
   const getLedgerById = (id?: string) => ledgers.find(l => l.id === id);
   const getItemById = (id?: string) => inventory.find(i => i.id === id);
 
   /**
-   * Atomic Double-Entry Voucher Creation
+   * Atomic Double-Entry Voucher Creation (Saved directly to Firebase Firestore)
    */
   const addVoucher = async (voucherData: Omit<TransactionVoucher, 'id'>): Promise<string> => {
     const newId = `vouch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const companyId = user?.uid || settings.id || 'company_apex_01';
+    const companyId = latestSettingsRef.current.id || 'company_ghosh_01';
+    const currentLedgers = latestLedgersRef.current;
+    const currentInventory = latestInventoryRef.current;
 
     // 1. Generate balanced journal entries
-    const journalEntries = generateJournalEntries(voucherData, ledgers);
+    const journalEntries = generateJournalEntries(voucherData, currentLedgers);
 
     const fullVoucher: TransactionVoucher = {
       ...voucherData,
@@ -265,7 +330,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     // 2. Compute ledger adjustments from journal entries
     const ledgerDeltas = computeLedgerDeltas(journalEntries, false);
-    const updatedLedgers = ledgers.map(l => {
+    const updatedLedgers = currentLedgers.map(l => {
       if (!ledgerDeltas.has(l.id)) return l;
       const delta = ledgerDeltas.get(l.id) || 0;
       return {
@@ -277,7 +342,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     // 3. Compute inventory adjustments
     const itemDeltas = computeInventoryDeltas(fullVoucher, false);
-    const updatedInventory = inventory.map(item => {
+    const updatedInventory = currentInventory.map(item => {
       if (!itemDeltas.has(item.id)) return item;
       const delta = itemDeltas.get(item.id) || 0;
       return {
@@ -287,38 +352,46 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
     });
 
-    // 4. Update local state immediately
+    // 4. Update refs and local state immediately for snappy UX
+    latestInventoryRef.current = updatedInventory;
+    latestLedgersRef.current = updatedLedgers;
+    latestVouchersRef.current = [fullVoucher, ...latestVouchersRef.current];
     setInventory(updatedInventory);
     setLedgers(updatedLedgers);
     setVouchers(prev => [fullVoucher, ...prev]);
 
-    // 5. Commit atomically to Firestore if authenticated
-    if (user) {
-      const affectedLedgers = updatedLedgers.filter(l => ledgerDeltas.has(l.id));
-      const affectedItems = updatedInventory.filter(i => itemDeltas.has(i.id));
+    // 5. Commit atomically to Firestore
+    const affectedLedgers = updatedLedgers.filter(l => ledgerDeltas.has(l.id));
+    const affectedItems = updatedInventory.filter(i => itemDeltas.has(i.id));
 
-      try {
-        await commitVoucherAtomicBatch(fullVoucher, affectedItems, affectedLedgers);
-      } catch (err) {
-        console.warn('Cloud batch sync pending, stored in local cache:', err);
-      }
+    try {
+      await commitVoucherAtomicBatch(fullVoucher, affectedItems, affectedLedgers);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS, 'true');
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sync voucher to Firebase.';
+      setLastError(message);
+      throw err;
     }
 
     return newId;
   };
 
   /**
-   * Atomic Double-Entry Voucher Deletion & Reversal
+   * Atomic Double-Entry Voucher Deletion & Reversal (Synced directly to Firebase Firestore)
    */
   const deleteVoucher = async (id: string) => {
-    const targetVoucher = vouchers.find(v => v.id === id);
+    const currentVouchers = latestVouchersRef.current;
+    const currentLedgers = latestLedgersRef.current;
+    const currentInventory = latestInventoryRef.current;
+    const targetVoucher = currentVouchers.find(v => v.id === id);
     if (!targetVoucher) return;
 
     // 1. Compute reversal ledger adjustments
-    const journalEntries = targetVoucher.journalEntries || generateJournalEntries(targetVoucher, ledgers);
-    const reverseLedgerDeltas = computeLedgerDeltas(journalEntries, true); // true = reversal
+    const journalEntries = targetVoucher.journalEntries || generateJournalEntries(targetVoucher, currentLedgers);
+    const reverseLedgerDeltas = computeLedgerDeltas(journalEntries, true);
 
-    const restoredLedgers = ledgers.map(l => {
+    const restoredLedgers = currentLedgers.map(l => {
       if (!reverseLedgerDeltas.has(l.id)) return l;
       const delta = reverseLedgerDeltas.get(l.id) || 0;
       return {
@@ -329,8 +402,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
 
     // 2. Compute reversal inventory stock adjustments
-    const reverseItemDeltas = computeInventoryDeltas(targetVoucher, true); // true = reversal
-    const restoredInventory = inventory.map(item => {
+    const reverseItemDeltas = computeInventoryDeltas(targetVoucher, true);
+    const restoredInventory = currentInventory.map(item => {
       if (!reverseItemDeltas.has(item.id)) return item;
       const delta = reverseItemDeltas.get(item.id) || 0;
       return {
@@ -340,30 +413,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
     });
 
-    // 3. Update local state immediately
+    // 3. Update refs and local state immediately
+    latestVouchersRef.current = currentVouchers.filter(v => v.id !== id);
+    latestLedgersRef.current = restoredLedgers;
+    latestInventoryRef.current = restoredInventory;
     setVouchers(prev => prev.filter(v => v.id !== id));
     setLedgers(restoredLedgers);
     setInventory(restoredInventory);
 
-    // 4. Commit atomic batch reversal to Firestore if authenticated
-    if (user) {
-      const affectedLedgers = restoredLedgers.filter(l => reverseLedgerDeltas.has(l.id));
-      const affectedItems = restoredInventory.filter(i => reverseItemDeltas.has(i.id));
+    // 4. Commit atomic batch reversal to Firestore
+    const affectedLedgers = restoredLedgers.filter(l => reverseLedgerDeltas.has(l.id));
+    const affectedItems = restoredInventory.filter(i => reverseItemDeltas.has(i.id));
 
-      try {
-        await revertVoucherAtomicBatch(id, affectedItems, affectedLedgers);
-      } catch (err) {
-        console.warn('Cloud reversal batch pending, restored in local cache:', err);
-      }
+    try {
+      await revertVoucherAtomicBatch(id, affectedItems, affectedLedgers);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete voucher in Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   /**
-   * Add Ledger with Duplicate Check
+   * Add Ledger with Duplicate Check (Saved directly to Firebase Firestore)
    */
   const addLedger = async (ledgerData: Omit<LedgerAccount, 'id'>): Promise<string> => {
-    // Duplicate check within same group
-    const duplicate = ledgers.find(
+    const currentLedgers = latestLedgersRef.current;
+    const duplicate = currentLedgers.find(
       l => l.group === ledgerData.group && l.name.trim().toLowerCase() === ledgerData.name.trim().toLowerCase()
     );
     if (duplicate) {
@@ -374,51 +451,62 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const fullLedger: LedgerAccount = {
       ...ledgerData,
       id: newId,
-      companyId: user?.uid || settings.id,
+      companyId: latestSettingsRef.current.id || 'company_ghosh_01',
       currentBalance: ledgerData.openingBalance || 0,
       createdAt: new Date().toISOString(),
     };
 
+    latestLedgersRef.current = [fullLedger, ...currentLedgers];
     setLedgers(prev => [fullLedger, ...prev]);
-    if (user) {
-      try {
-        await saveLedgerToFirestore(fullLedger);
-      } catch (err) {
-        console.warn('Ledger saved in local storage, cloud sync pending:', err);
-      }
+    try {
+      await saveLedgerToFirestore(fullLedger);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_LEDGERS, 'true');
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save ledger to Firebase.';
+      setLastError(message);
+      throw err;
     }
     return newId;
   };
 
   const updateLedger = async (updated: LedgerAccount) => {
-    setLedgers(prev => prev.map(l => (l.id === updated.id ? updated : l)));
-    if (user) {
-      try {
-        await saveLedgerToFirestore(updated);
-      } catch (err) {
-        console.warn('Ledger update saved locally:', err);
-      }
+    const withTimestamp: LedgerAccount = {
+      ...updated,
+      updatedAt: new Date().toISOString(),
+    };
+    latestLedgersRef.current = latestLedgersRef.current.map(l => (l.id === withTimestamp.id ? withTimestamp : l));
+    setLedgers(prev => prev.map(l => (l.id === withTimestamp.id ? withTimestamp : l)));
+    try {
+      await saveLedgerToFirestore(withTimestamp);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update ledger in Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   const deleteLedger = async (id: string) => {
+    latestLedgersRef.current = latestLedgersRef.current.filter(l => l.id !== id);
     setLedgers(prev => prev.filter(l => l.id !== id));
-    if (user) {
-      try {
-        await deleteLedgerFromFirestore(id);
-      } catch (err) {
-        console.warn('Ledger deleted locally:', err);
-      }
+    try {
+      await deleteLedgerFromFirestore(id);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete ledger in Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   /**
-   * Add Inventory Item with SKU & Name Duplicate Validation
+   * Add Inventory Item with SKU & Name Duplicate Validation (Saved directly to Firebase Firestore)
    */
   const addInventoryItem = async (itemData: Omit<InventoryItem, 'id'>): Promise<string> => {
-    // Check duplicate SKU
+    const currentInventory = latestInventoryRef.current;
     if (itemData.sku && itemData.sku.trim()) {
-      const dupSku = inventory.find(
+      const dupSku = currentInventory.find(
         i => i.sku.trim().toLowerCase() === itemData.sku.trim().toLowerCase()
       );
       if (dupSku) {
@@ -426,8 +514,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
 
-    // Check duplicate Name
-    const dupName = inventory.find(
+    const dupName = currentInventory.find(
       i => i.name.trim().toLowerCase() === itemData.name.trim().toLowerCase()
     );
     if (dupName) {
@@ -438,76 +525,102 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const fullItem: InventoryItem = {
       ...itemData,
       id: newId,
-      companyId: user?.uid || settings.id,
+      companyId: latestSettingsRef.current.id || 'company_ghosh_01',
       openingStock: itemData.openingStock ?? itemData.currentStock ?? 0,
       createdAt: new Date().toISOString(),
     };
 
+    latestInventoryRef.current = [fullItem, ...currentInventory];
     setInventory(prev => [fullItem, ...prev]);
-    if (user) {
-      try {
-        await saveInventoryItemToFirestore(fullItem);
-      } catch (err) {
-        console.warn('Inventory item saved locally, cloud sync pending:', err);
-      }
+    try {
+      await saveInventoryItemToFirestore(fullItem);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_INVENTORY, 'true');
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save product to Firebase.';
+      setLastError(message);
+      throw err;
     }
     return newId;
   };
 
   const updateInventoryItem = async (updated: InventoryItem) => {
-    setInventory(prev => prev.map(i => (i.id === updated.id ? updated : i)));
-    if (user) {
-      try {
-        await saveInventoryItemToFirestore(updated);
-      } catch (err) {
-        console.warn('Inventory update saved locally:', err);
-      }
+    const withTimestamp: InventoryItem = {
+      ...updated,
+      updatedAt: new Date().toISOString(),
+    };
+    latestInventoryRef.current = latestInventoryRef.current.map(i => (i.id === withTimestamp.id ? withTimestamp : i));
+    setInventory(prev => prev.map(i => (i.id === withTimestamp.id ? withTimestamp : i)));
+    try {
+      await saveInventoryItemToFirestore(withTimestamp);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update product in Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   const deleteInventoryItem = async (id: string) => {
+    latestInventoryRef.current = latestInventoryRef.current.filter(i => i.id !== id);
     setInventory(prev => prev.filter(i => i.id !== id));
-    if (user) {
-      try {
-        await deleteInventoryItemFromFirestore(id);
-      } catch (err) {
-        console.warn('Inventory item deleted locally:', err);
-      }
+    try {
+      await deleteInventoryItemFromFirestore(id);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete product in Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   const updateStockQuantity = async (itemId: string, deltaQty: number) => {
-    setInventory(prev =>
-      prev.map(i => {
-        if (i.id !== itemId) return i;
-        const current = i.currentStock || 0;
-        const updated = {
-          ...i,
-          currentStock: Math.max(0, current + deltaQty),
-          updatedAt: new Date().toISOString(),
-        };
-        if (user) {
-          saveInventoryItemToFirestore(updated).catch(e => console.warn(e));
-        }
-        return updated;
-      })
-    );
+    const target = latestInventoryRef.current.find(i => i.id === itemId);
+    if (!target) return;
+
+    const updatedItem: InventoryItem = {
+      ...target,
+      currentStock: Math.max(0, (target.currentStock || 0) + deltaQty),
+      updatedAt: new Date().toISOString(),
+    };
+
+    latestInventoryRef.current = latestInventoryRef.current.map(i => (i.id === itemId ? updatedItem : i));
+    setInventory(prev => prev.map(i => (i.id === itemId ? updatedItem : i)));
+    try {
+      await saveInventoryItemToFirestore(updatedItem);
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update stock in Firebase.';
+      setLastError(message);
+      throw err;
+    }
   };
 
   const updateSettings = async (updated: CompanySettings) => {
-    setSettings(updated);
-    if (user) {
-      try {
-        await saveSettingsToFirestore(updated);
-      } catch (err) {
-        console.warn('Settings saved locally:', err);
-      }
+    const withTimestamp: CompanySettings = {
+      ...updated,
+      updatedAt: new Date().toISOString(),
+    };
+    latestSettingsRef.current = withTimestamp;
+    setSettings(withTimestamp);
+    try {
+      await saveSettingsToFirestore(withTimestamp);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_SETTINGS, 'true');
+      setLastError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save settings to Firebase.';
+      setLastError(message);
+      throw err;
     }
   };
 
   const resetToSampleData = () => {
+    latestVouchersRef.current = initialVouchers;
+    latestLedgersRef.current = ensureSystemLedgers(initialLedgers);
+    latestInventoryRef.current = initialInventory;
+    latestSettingsRef.current = initialCompanySettings;
     setVouchers(initialVouchers);
-    setLedgers(ensureSystemLedgers(initialLedgers));
+    setLedgers(latestLedgersRef.current);
     setInventory(initialInventory);
     setSettings(initialCompanySettings);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.VOUCHERS);
@@ -525,9 +638,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         settings,
         dateFilter,
         setDateFilter,
-        user,
         isFirebaseConnected,
         isSyncing,
+        lastError,
+        clearError,
         addVoucher,
         deleteVoucher,
         addLedger,

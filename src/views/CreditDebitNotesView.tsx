@@ -1,31 +1,32 @@
 import React, { useState, useMemo } from 'react';
 import {
-  RotateCcw,
   Search,
   Plus,
   Printer,
-  FileText,
-  Building,
+  Download,
   HelpCircle,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface CreditDebitNotesViewProps {
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
-  onOpenNewVoucher: () => void;
+  onOpenNewVoucher: (type: 'CREDIT_NOTE' | 'DEBIT_NOTE') => void;
 }
 
 export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
   onSelectVoucherForPrint,
   onOpenNewVoucher,
 }) => {
-  const { vouchers, deleteVoucher } = useAccounting();
+  const { vouchers, settings, getLedgerById, deleteVoucher } = useAccounting();
 
   const [activeTab, setActiveTab] = useState<'CREDIT_NOTE' | 'DEBIT_NOTE'>('CREDIT_NOTE');
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const notesList = useMemo(() => {
     return vouchers.filter(v => {
@@ -59,48 +60,51 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Credit vs Debit Note Toggle */}
           <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
             <button
+              type="button"
               onClick={() => setActiveTab('CREDIT_NOTE')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 activeTab === 'CREDIT_NOTE'
                   ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              Credit Notes (Customer Returns)
+              Credit Notes (Customer)
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('DEBIT_NOTE')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 activeTab === 'DEBIT_NOTE'
                   ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              Debit Notes (Vendor Returns)
+              Debit Notes (Vendor)
             </button>
           </div>
 
           <button
-            onClick={onOpenNewVoucher}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            type="button"
+            onClick={() => onOpenNewVoucher(activeTab)}
+            className="theme-bg theme-bg-hover flex items-center gap-1.5 px-4 py-2.5 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Issue {activeTab === 'CREDIT_NOTE' ? 'Credit Note' : 'Debit Note'}</span>
+            <span>Issue {activeTab === 'CREDIT_NOTE' ? 'Credit Note' : 'Debit Note'}</span>
           </button>
         </div>
       </div>
 
       {/* Statutory Guidance Box */}
       <div className="p-3 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex items-start gap-3 text-xs text-slate-600 dark:text-slate-300">
-        <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        <HelpCircle className="w-4 h-4 theme-text shrink-0 mt-0.5" />
         <div>
           {activeTab === 'CREDIT_NOTE' ? (
             <p>
-              <strong>Credit Note Mechanism:</strong> Issued to a customer when goods are returned, damaged in transit, or an overcharge discount is credited. This reduces the customer's outstanding balance, restores inventory counts to the target warehouse, and reverses output GST liability in Table 9B of GSTR-1.
+              <strong>Credit Note Mechanism:</strong> Issued to a customer when goods are returned, damaged in transit, or an overcharge discount is credited. This reduces the customer&apos;s outstanding balance, restores inventory counts to stock, and reverses output GST liability in Table 9B of GSTR-1.
             </p>
           ) : (
             <p>
@@ -116,7 +120,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Taxable Returned
           </p>
-          <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
             {formatINR(totalTaxable)}
           </p>
         </div>
@@ -125,7 +129,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total GST Reversal Amount
           </p>
-          <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
             {formatINR(totalTax)}
           </p>
         </div>
@@ -134,10 +138,36 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Net Adjustment Value
           </p>
-          <p className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-purple-600 dark:text-purple-400 mt-1">
             {formatINR(totalGrand)}
           </p>
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search note #, party name, or return reason..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 theme-ring focus:outline-hidden"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <span className="text-[11px] font-mono text-slate-400">
+          Showing {notesList.length} note{notesList.length === 1 ? '' : 's'}
+        </span>
       </div>
 
       {/* Table */}
@@ -161,7 +191,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
               {notesList.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
-                    No {activeTab.replace('_', ' ').toLowerCase()}s issued yet.
+                    No {activeTab.replace('_', ' ').toLowerCase()}s match your filter.
                   </td>
                 </tr>
               ) : (
@@ -170,15 +200,15 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                     key={n.id}
                     className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400">
+                    <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {n.date}
                     </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-slate-100">
+                    <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                       {n.voucherNo}
                     </td>
                     <td className="py-2.5 px-3">
                       <p className="font-semibold text-slate-900 dark:text-slate-100">
-                        {n.partyName}
+                        {n.partyName || 'Walk-in / Counter Party'}
                       </p>
                       {n.notes && (
                         <p className="text-[11px] text-slate-500 italic truncate max-w-md">
@@ -186,35 +216,70 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                         </p>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400">
                       {formatINR(n.subtotal)}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-500">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500">
                       {formatINR(n.cgstTotal + n.sgstTotal + n.igstTotal)}
                     </td>
-                    <td className="py-2.5 px-4 text-right font-mono font-bold text-purple-600 dark:text-purple-400">
+                    <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-purple-600 dark:text-purple-400">
                       {formatINR(n.grandTotal)}
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
                         <button
+                          type="button"
+                          onClick={() =>
+                            downloadInvoicePdf({
+                              voucher: n,
+                              settings,
+                              party: n.partyId ? getLedgerById(n.partyId) : undefined,
+                              useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
+                            })
+                          }
+                          title="Download PDF Note"
+                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onSelectVoucherForPrint(n)}
                           title="Print / View Note"
-                          className="px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded font-medium border border-blue-200 dark:border-blue-900"
+                          className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
                         >
-                          Print
+                          <Printer className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete note ${n.voucherNo}? This will reverse stock and ledger balances.`)) {
-                              deleteVoucher(n.id);
-                            }
-                          }}
-                          title="Delete Note"
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {confirmDeleteId === n.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                deleteVoucher(n.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(n.id)}
+                            title="Delete Note"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

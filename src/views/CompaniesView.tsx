@@ -1,33 +1,35 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Building,
   Search,
   Plus,
   ArrowLeft,
   Printer,
+  Download,
   Trash2,
   Edit2,
   Phone,
-  Mail,
   MapPin,
-  CreditCard,
-  Receipt,
-  FileCheck2,
   X,
   ShoppingCart,
   DollarSign
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { LedgerAccount, TransactionVoucher } from '../types/accounting';
+import { INDIAN_STATES, LedgerAccount, TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface CompaniesViewProps {
+  initialCompanyId?: string;
+  onClearInitialCompany?: () => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
   onOpenNewPurchase: (partyId: string) => void;
   onOpenNewPayment: (partyId: string) => void;
 }
 
 export const CompaniesView: React.FC<CompaniesViewProps> = ({
+  initialCompanyId,
+  onClearInitialCompany,
   onSelectVoucherForPrint,
   onOpenNewPurchase,
   onOpenNewPayment,
@@ -35,15 +37,19 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const {
     ledgers,
     vouchers,
+    settings,
     addLedger,
     updateLedger,
     deleteLedger
   } = useAccounting();
 
-  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
+  const defaultStateCode = settings.stateCode || '19';
+
+  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(initialCompanyId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -52,9 +58,28 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [stateCode, setStateCode] = useState('27');
+  const [stateCode, setStateCode] = useState(defaultStateCode);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [companyError, setCompanyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialCompanyId) {
+      setActiveCompanyId(initialCompanyId);
+      setConfirmDeleteId(null);
+    }
+  }, [initialCompanyId]);
+
+  useEffect(() => {
+    if (!showAddModal && !showEditModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddModal(false);
+        setShowEditModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showAddModal, showEditModal]);
 
   // Filter only Sundry Creditors (Companies / Suppliers)
   const companies = useMemo(() => {
@@ -125,7 +150,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
-        stateCode: stateCode.trim() || '27',
+        stateCode: stateCode.trim() || defaultStateCode,
         openingBalance: initialBal,
         currentBalance: initialBal,
       });
@@ -140,28 +165,43 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCompany || !name.trim()) return;
+    setCompanyError(null);
 
-    await updateLedger({
-      ...activeCompany,
-      name: name.trim(),
-      contactPerson: contactPerson.trim() || undefined,
-      gstin: gstin.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      stateCode: stateCode.trim() || '27',
-    });
+    try {
+      await updateLedger({
+        ...activeCompany,
+        name: name.trim(),
+        contactPerson: contactPerson.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        stateCode: stateCode.trim() || defaultStateCode,
+      });
 
-    setShowEditModal(false);
+      setShowEditModal(false);
+    } catch (err: any) {
+      setCompanyError(err.message || 'Failed to update company profile');
+    }
   };
 
-  const handleDeleteCompany = async (id: string) => {
-    if (confirm('Are you sure you want to delete this company account?')) {
+  const confirmDeleteCompany = async (id: string) => {
+    try {
       await deleteLedger(id);
+      setConfirmDeleteId(null);
       if (activeCompanyId === id) {
         setActiveCompanyId(null);
+        onClearInitialCompany?.();
       }
+    } catch {
+      setConfirmDeleteId(null);
     }
+  };
+
+  const handleBackToDirectory = () => {
+    setActiveCompanyId(null);
+    setConfirmDeleteId(null);
+    onClearInitialCompany?.();
   };
 
   const resetForm = () => {
@@ -171,18 +211,20 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
     setPhone('');
     setEmail('');
     setAddress('');
-    setStateCode('27');
+    setStateCode(defaultStateCode);
     setOpeningBalance(0);
+    setCompanyError(null);
   };
 
   const openEdit = (c: LedgerAccount) => {
+    setCompanyError(null);
     setName(c.name);
     setContactPerson(c.contactPerson || '');
     setGstin(c.gstin || '');
     setPhone(c.phone || '');
     setEmail(c.email || '');
     setAddress(c.address || '');
-    setStateCode(c.stateCode || '27');
+    setStateCode(c.stateCode || defaultStateCode);
     setShowEditModal(true);
   };
 
@@ -194,48 +236,75 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveCompanyId(null)}
+              type="button"
+              onClick={handleBackToDirectory}
               className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shadow-xs"
+              title="Back to Companies Directory"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                  {activeCompany.name}
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-                  Company / Supplier
-                </span>
-              </div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                {activeCompany.name}
+              </h2>
               <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                {activeCompany.gstin ? `GSTIN: ${activeCompany.gstin}` : 'Unregistered Supplier'} · State: {activeCompany.stateCode || '27'}
+                Company / Supplier · {activeCompany.gstin ? `GSTIN: ${activeCompany.gstin}` : 'Unregistered Supplier'} · State: {activeCompany.stateCode || defaultStateCode}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={() => onOpenNewPurchase(activeCompany.id)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
+              className="flex items-center gap-1.5 px-3.5 py-2 theme-bg theme-bg-hover text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
             >
               <ShoppingCart className="w-3.5 h-3.5" />
-              <span>+ Create Purchase</span>
+              <span>Create Purchase</span>
             </button>
             <button
+              type="button"
               onClick={() => onOpenNewPayment(activeCompany.id)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
             >
               <DollarSign className="w-3.5 h-3.5" />
-              <span>+ Pay Company</span>
+              <span>Pay Company</span>
             </button>
             <button
+              type="button"
               onClick={() => openEdit(activeCompany)}
-              className="p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+              className="p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
               title="Edit Profile"
             >
               <Edit2 className="w-4 h-4" />
             </button>
+            {confirmDeleteId === activeCompany.id ? (
+              <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => confirmDeleteCompany(activeCompany.id)}
+                  className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(activeCompany.id)}
+                className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:bg-rose-950/40 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
+                title="Delete Company"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -245,7 +314,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Total Purchases Billed
             </p>
-            <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+            <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
               {formatINR(companyTotalPurchases)}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -257,7 +326,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Total Amount Paid
             </p>
-            <p className="text-xl font-bold font-mono text-teal-600 dark:text-teal-400 mt-1">
+            <p className="text-xl font-bold font-mono tabular-nums text-teal-600 dark:text-teal-400 mt-1">
               {formatINR(companyTotalPaid)}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -269,7 +338,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Current Payable Due
             </p>
-            <p className={`text-xl font-bold font-mono mt-1 ${activeCompany.currentBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+            <p className={`text-xl font-bold font-mono tabular-nums mt-1 ${activeCompany.currentBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {formatINR(Math.abs(activeCompany.currentBalance))}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -341,7 +410,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                     <th className="py-2.5 px-4 w-32 text-right font-bold text-slate-900 dark:text-slate-100">
                       Amount (₹)
                     </th>
-                    <th className="py-2.5 px-3 w-20 text-center">Print</th>
+                    <th className="py-2.5 px-3 w-24 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -354,7 +423,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   ) : (
                     companyPurchases.map(v => (
                       <tr key={v.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                        <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {v.date}
                         </td>
                         <td className="py-2.5 px-3 font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
@@ -368,23 +437,34 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                         <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
                           {v.paymentMode}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {formatINR(v.subtotal)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                           {formatINR(v.cgstTotal + v.sgstTotal + v.igstTotal)}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {formatINR(v.grandTotal)}
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => onSelectVoucherForPrint(v)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
-                            title="Print / View Bill"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => downloadInvoicePdf({ voucher: v, settings, party: activeCompany })}
+                              className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              title="Download PDF"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSelectVoucherForPrint(v)}
+                              className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              title="Print / View Bill"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -458,18 +538,34 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
 
         {/* Edit Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8">
+          <div
+            onClick={() => setShowEditModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8"
+            >
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   Edit Company Profile
                 </h3>
-                <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <form onSubmit={handleUpdateCompany} className="space-y-4 text-xs">
+                {companyError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                    {companyError}
+                  </div>
+                )}
+
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Company Name *
@@ -479,7 +575,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                     required
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
@@ -492,7 +588,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                       type="text"
                       value={contactPerson}
                       onChange={e => setContactPerson(e.target.value)}
-                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
 
@@ -504,7 +600,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                       type="text"
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
                 </div>
@@ -518,21 +614,38 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                       type="text"
                       value={gstin}
                       onChange={e => setGstin(e.target.value.toUpperCase())}
-                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
 
                   <div>
                     <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Email Address
+                      State Jurisdiction
                     </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-                    />
+                    <select
+                      value={stateCode}
+                      onChange={e => setStateCode(e.target.value)}
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                    >
+                      {INDIAN_STATES.map(st => (
+                        <option key={st.code} value={st.code}>
+                          {st.name} ({st.code})
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                  />
                 </div>
 
                 <div>
@@ -543,7 +656,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                     rows={2}
                     value={address}
                     onChange={e => setAddress(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
@@ -551,13 +664,13 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-3.5 py-2 text-slate-600 bg-slate-100 rounded-lg"
+                    className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                    className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
                   >
                     Save Changes
                   </button>
@@ -577,7 +690,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <Building className="w-5 h-5 text-purple-600" />
+            <Building className="w-5 h-5 theme-text" />
             <span>Companies &amp; Suppliers (Sundry Creditors)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -586,14 +699,15 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         </div>
 
         <button
+          type="button"
           onClick={() => {
             resetForm();
             setShowAddModal(true);
           }}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add New Company</span>
+          <span>Add New Company</span>
         </button>
       </div>
 
@@ -603,7 +717,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Supplier Payables (We Owe)
           </p>
-          <p className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400 mt-1">
             {formatINR(totalPayables)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -615,7 +729,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Registered Vendor Companies
           </p>
-          <p className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
             {companies.length} Companies
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -627,7 +741,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Active Payables
           </p>
-          <p className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
             {companies.filter(c => c.currentBalance < 0).length} Companies
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -645,7 +759,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
             placeholder="Search company name, phone, GSTIN, city..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden"
+            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden theme-ring"
           />
         </div>
       </div>
@@ -663,7 +777,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                 <th className="py-2.5 px-4 w-36 text-right font-bold text-slate-900 dark:text-slate-100">
                   Balance Payable (₹)
                 </th>
-                <th className="py-2.5 px-3 w-36 text-center">Actions</th>
+                <th className="py-2.5 px-3 w-40 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -678,13 +792,14 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   const isPayable = c.currentBalance < 0;
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="py-2.5 px-4 text-center text-slate-400 font-mono">
+                      <td className="py-2.5 px-4 text-center text-slate-400 font-mono tabular-nums">
                         {idx + 1}
                       </td>
                       <td className="py-2.5 px-3">
                         <button
+                          type="button"
                           onClick={() => setActiveCompanyId(c.id)}
-                          className="font-semibold text-blue-600 dark:text-blue-400 hover:underline text-left block"
+                          className="font-semibold theme-text hover:underline text-left block"
                         >
                           {c.name}
                         </button>
@@ -700,8 +815,8 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                       <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
                         {c.gstin || 'Unregistered'}
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap">
-                        <span className={isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}>
+                      <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold whitespace-nowrap">
+                        <span className={isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
                           {formatINR(Math.abs(c.currentBalance))}
                         </span>
                         <span className="text-[9px] uppercase font-bold text-slate-400 block">
@@ -711,25 +826,47 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
+                            type="button"
                             onClick={() => setActiveCompanyId(c.id)}
-                            className="px-2.5 py-1 text-[11px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded font-semibold border border-blue-200 dark:border-blue-800"
+                            className="px-2.5 py-1 text-[11px] theme-soft-badge rounded font-semibold hover:opacity-90"
                           >
                             View Page
                           </button>
                           <button
+                            type="button"
                             onClick={() => onOpenNewPurchase(c.id)}
                             title="New Purchase"
-                            className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded"
+                            className="p-1 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteCompany(c.id)}
-                            title="Delete Company"
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {confirmDeleteId === c.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => confirmDeleteCompany(c.id)}
+                                className="px-2 py-0.5 text-[10px] font-bold bg-rose-600 text-white rounded"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(c.id)}
+                              title="Delete Company"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -743,13 +880,23 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
 
       {/* Add Company Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8">
+        <div
+          onClick={() => setShowAddModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8"
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Register New Company / Supplier
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -770,7 +917,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   placeholder="e.g. Havells India Cables Ltd"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -784,20 +931,20 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                     placeholder="e.g. Sales Director / Manager"
                     value={contactPerson}
                     onChange={e => setContactPerson(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Phone / Mobile *
+                    Phone / Mobile
                   </label>
                   <input
                     type="text"
                     placeholder="+91 22 2847 1000"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
               </div>
@@ -809,25 +956,42 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="27AABCH1234F1Z8"
+                    placeholder="19AABCH1234F1Z8"
                     value={gstin}
                     onChange={e => setGstin(e.target.value.toUpperCase())}
-                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Email Address
+                    State Jurisdiction
                   </label>
-                  <input
-                    type="email"
-                    placeholder="orders@supplier.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-                  />
+                  <select
+                    value={stateCode}
+                    onChange={e => setStateCode(e.target.value)}
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                  >
+                    {INDIAN_STATES.map(st => (
+                      <option key={st.code} value={st.code}>
+                        {st.name} ({st.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  placeholder="orders@supplier.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                />
               </div>
 
               <div>
@@ -839,7 +1003,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   placeholder="Industrial Area, Sector, City, Pincode"
                   value={address}
                   onChange={e => setAddress(e.target.value)}
-                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -853,7 +1017,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   placeholder="Amount you owe to company at start"
                   value={openingBalance}
                   onChange={e => setOpeningBalance(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -861,13 +1025,13 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-2 text-slate-600 bg-slate-100 rounded-lg"
+                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
                 >
                   Save Company
                 </button>

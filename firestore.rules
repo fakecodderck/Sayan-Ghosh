@@ -7,11 +7,7 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Security Primitives
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
+    // Validation & Schema Primitives
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -26,35 +22,96 @@ service cloud.firestore {
 
     function isValidLedger(data) {
       return data.keys().hasAll(['id', 'name', 'group']) &&
-             data.id is string && data.id.size() <= 128 &&
+             data.keys().hasOnly([
+               'id', 'companyId', 'name', 'group', 'contactPerson',
+               'gstin', 'pan', 'stateCode', 'phone', 'email', 'address',
+               'openingBalance', 'currentBalance', 'creditLimit', 'notes',
+               'createdBy', 'createdAt', 'updatedAt'
+             ]) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
-             data.group in ['Sundry Debtors', 'Sundry Creditors', 'Bank Accounts', 'Cash-in-hand', 'Direct Expenses', 'Indirect Expenses', 'Sales Accounts', 'Purchase Accounts', 'Duties & Taxes'];
+             data.group in [
+               'Sundry Debtors', 'Sundry Creditors', 'Bank Accounts', 'Cash-in-hand',
+               'Direct Expenses', 'Indirect Expenses', 'Sales Accounts', 'Purchase Accounts', 'Duties & Taxes'
+             ] &&
+             (!('openingBalance' in data) || data.openingBalance is number) &&
+             (!('currentBalance' in data) || data.currentBalance is number) &&
+             (!('creditLimit' in data) || data.creditLimit is number) &&
+             (!('gstin' in data) || (data.gstin is string && data.gstin.size() <= 20)) &&
+             (!('pan' in data) || (data.pan is string && data.pan.size() <= 20)) &&
+             (!('stateCode' in data) || (data.stateCode is string && data.stateCode.size() <= 5)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 300)) &&
+             (!('contactPerson' in data) || (data.contactPerson is string && data.contactPerson.size() <= 100)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500));
     }
 
     function isValidItem(data) {
       return data.keys().hasAll(['id', 'name', 'sku', 'hsnCode', 'unit', 'sellingPrice', 'gstRate']) &&
-             data.id is string && data.id.size() <= 128 &&
+             data.keys().hasOnly([
+               'id', 'companyId', 'name', 'sku', 'hsnCode', 'unit',
+               'purchasePrice', 'sellingPrice', 'gstRate', 'minStockAlert',
+               'openingStock', 'currentStock', 'description', 'category',
+               'createdBy', 'createdAt', 'updatedAt', 'stockByBranch'
+             ]) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
              data.sku is string && data.sku.size() <= 60 &&
              data.hsnCode is string && data.hsnCode.size() <= 20 &&
              data.unit in ['Pcs', 'Box', 'Kg', 'Mtr', 'Ltr', 'Set', 'Bag', 'Roll'] &&
              data.sellingPrice is number && data.sellingPrice >= 0 &&
-             data.gstRate is number && data.gstRate >= 0;
+             data.gstRate is number && data.gstRate >= 0 &&
+             (!('purchasePrice' in data) || (data.purchasePrice is number && data.purchasePrice >= 0)) &&
+             (!('minStockAlert' in data) || (data.minStockAlert is number && data.minStockAlert >= 0)) &&
+             (!('openingStock' in data) || data.openingStock is number) &&
+             (!('currentStock' in data) || data.currentStock is number) &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 80));
     }
 
     function isValidVoucher(data) {
       return data.keys().hasAll(['id', 'voucherNo', 'date', 'type', 'grandTotal']) &&
-             data.id is string && data.id.size() <= 128 &&
+             data.keys().hasOnly([
+               'id', 'companyId', 'voucherNo', 'date', 'type',
+               'partyId', 'partyName', 'customerMode', 'guestDetails',
+               'isGstBill', 'isGstInclusive', 'paymentMode', 'referenceNo',
+               'subtotal', 'cgstTotal', 'sgstTotal', 'igstTotal', 'grandTotal',
+               'items', 'journalEntries', 'notes',
+               'createdBy', 'createdAt', 'updatedAt',
+               'sourceBranchId', 'destinationBranchId'
+             ]) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              data.voucherNo is string && data.voucherNo.size() > 0 && data.voucherNo.size() <= 50 &&
-             data.date is string && data.date.size() <= 35 &&
+             data.date is string && data.date.size() > 0 && data.date.size() <= 35 &&
              data.type in ['SALE', 'PURCHASE', 'PAYMENT', 'RECEIPT', 'CONTRA', 'CREDIT_NOTE', 'DEBIT_NOTE', 'STOCK_TRANSFER'] &&
-             data.grandTotal is number;
+             data.grandTotal is number &&
+             (!('customerMode' in data) || data.customerMode in ['existing', 'new', 'guest']) &&
+             (!('paymentMode' in data) || data.paymentMode in ['CASH', 'BANK', 'UPI', 'CREDIT']) &&
+             (!('isGstBill' in data) || data.isGstBill is bool) &&
+             (!('isGstInclusive' in data) || data.isGstInclusive is bool) &&
+             (!('items' in data) || (data.items is list && data.items.size() <= 200)) &&
+             (!('journalEntries' in data) || (data.journalEntries is list && data.journalEntries.size() <= 100)) &&
+             (!('guestDetails' in data) || data.guestDetails is map) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+             (!('partyName' in data) || (data.partyName is string && data.partyName.size() <= 120)) &&
+             (!('referenceNo' in data) || (data.referenceNo is string && data.referenceNo.size() <= 80));
     }
 
     function isValidSettings(data) {
       return data.keys().hasAll(['id', 'name']) &&
-             data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 120;
+             data.keys().hasOnly([
+               'id', 'name', 'gstin', 'state', 'stateCode', 'phone', 'email', 'address',
+               'bankName', 'accountNo', 'ifsc', 'branch', 'upiId', 'invoiceTerms',
+               'paperSize', 'showQrCode', 'authorizedSignatoryTitle', 'themeColor',
+               'invoiceTemplate', 'updatedBy', 'updatedAt'
+             ]) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             (!('paperSize' in data) || data.paperSize in ['A5', 'A4']) &&
+             (!('showQrCode' in data) || data.showQrCode is bool) &&
+             (!('invoiceTemplate' in data) || data.invoiceTemplate is map) &&
+             (!('invoiceTerms' in data) || (data.invoiceTerms is string && data.invoiceTerms.size() <= 2000));
     }
 
     // Test connection document
@@ -62,40 +119,37 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Ledgers collection
+    // Personal-use single-workspace business collections (schema-validated, no login required)
     match /ledgers/{ledgerId} {
-      allow get: if isSignedIn() && isValidId(ledgerId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming());
-      allow update: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming()) && incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(ledgerId);
+      allow get: if isValidId(ledgerId);
+      allow list: if true;
+      allow create: if isValidId(ledgerId) && isValidLedger(incoming());
+      allow update: if isValidId(ledgerId) && isValidLedger(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(ledgerId);
     }
 
-    // Inventory Catalog
     match /inventory/{itemId} {
-      allow get: if isSignedIn() && isValidId(itemId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
-      allow update: if isSignedIn() && isValidId(itemId) && isValidItem(incoming()) && incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(itemId);
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create: if isValidId(itemId) && isValidItem(incoming());
+      allow update: if isValidId(itemId) && isValidItem(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(itemId);
     }
 
-    // Vouchers (Day Book, Sales, Purchases, Payments, Credit/Debit notes)
     match /vouchers/{voucherId} {
-      allow get: if isSignedIn() && isValidId(voucherId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming());
-      allow update: if isSignedIn() && isValidId(voucherId) && isValidVoucher(incoming()) && incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(voucherId);
+      allow get: if isValidId(voucherId);
+      allow list: if true;
+      allow create: if isValidId(voucherId) && isValidVoucher(incoming());
+      allow update: if isValidId(voucherId) && isValidVoucher(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(voucherId);
     }
 
-    // Settings
     match /settings/{settingId} {
-      allow get: if isSignedIn() && isValidId(settingId);
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming());
-      allow update: if isSignedIn() && isValidId(settingId) && isValidSettings(incoming()) && incoming().id == existing().id;
-      allow delete: if isSignedIn() && isValidId(settingId);
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isValidId(settingId) && isValidSettings(incoming());
+      allow update: if isValidId(settingId) && isValidSettings(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(settingId);
     }
   }
 }

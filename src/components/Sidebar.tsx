@@ -15,25 +15,28 @@ import {
   LayoutDashboard,
   ChevronDown,
   ChevronRight,
-  Folder,
-  FolderOpen,
+  FilePlus2,
+  PackagePlus,
+  LayoutTemplate,
   X
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { getThemePreset } from '../utils/theme';
 
 export type ActiveModule =
   | 'dashboard'
+  | 'create_invoice'
   | 'daybook'
   | 'ledgers'
   | 'all_invoices'
   | 'purchases'
   | 'sales'
+  | 'add_product'
   | 'inventory'
   | 'profit_loss'
   | 'payments'
   | 'customers'
   | 'companies'
+  | 'invoice_builder'
   | 'gst_bill'
   | 'credit_debit'
   | 'gstr_reports'
@@ -53,24 +56,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsMobileMenuOpen,
 }) => {
   const { inventory, settings } = useAccounting();
-  const currentPreset = getThemePreset(settings.themeColor || 'blue');
 
-  // Low stock badge count
-  const lowStockCount = inventory.filter(item => {
-    return (item.currentStock || 0) <= item.minStockAlert;
-  }).length;
+  const lowStockCount = inventory.filter(item => (item.currentStock || 0) <= item.minStockAlert).length;
 
-  // Track expanded category folders in mobile/drawer view.
-  // Default all subfolders to CLOSED, but keep the folder containing activeModule open so active page is visible.
-  const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>(() => {
-    return {
-      'OVERVIEW': activeModule === 'dashboard',
-      'CORE REGISTERS': ['daybook', 'ledgers', 'inventory', 'all_invoices'].includes(activeModule),
-      'COMMERCIAL TRANSACTIONS': ['sales', 'purchases', 'payments', 'credit_debit'].includes(activeModule),
-      'PARTY DIRECTORIES': ['customers', 'companies'].includes(activeModule),
-      'BILLING & STATEMENTS': ['gst_bill', 'gstr_reports', 'profit_loss', 'settings'].includes(activeModule),
-    };
-  });
+  const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>(() => ({
+    'BILLING & DAILY OPS': ['dashboard', 'create_invoice', 'daybook', 'all_invoices'].includes(activeModule),
+    'PRODUCTS & STOCK': ['add_product', 'inventory'].includes(activeModule),
+    'CUSTOMERS & COMPANIES': ['customers', 'companies', 'ledgers'].includes(activeModule),
+    'VOUCHER REGISTERS': ['sales', 'purchases', 'payments', 'credit_debit'].includes(activeModule),
+    'PRINT, FORMATS & REPORTS': ['invoice_builder', 'gst_bill', 'gstr_reports', 'profit_loss', 'settings'].includes(activeModule),
+  }));
 
   const toggleCategory = (title: string) => {
     setOpenCategories(prev => ({
@@ -84,46 +79,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
     items: { id: ActiveModule; label: string; icon: React.ElementType; badge?: number }[];
   }[] = [
     {
-      sectionTitle: 'OVERVIEW',
+      sectionTitle: 'BILLING & DAILY OPS',
       items: [
-        { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard },
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'create_invoice', label: 'Create Invoice', icon: FilePlus2 },
+        { id: 'daybook', label: 'Day Book', icon: BookOpen },
+        { id: 'all_invoices', label: 'All Invoices', icon: FileCheck2 },
       ],
     },
     {
-      sectionTitle: 'CORE REGISTERS',
+      sectionTitle: 'PRODUCTS & STOCK',
       items: [
-        { id: 'all_invoices', label: 'All Invoices Register', icon: FileCheck2 },
-        { id: 'daybook', label: 'Day Book (Journal)', icon: BookOpen },
-        { id: 'ledgers', label: 'Ledger Master Accounts', icon: BarChart3 },
-        { id: 'inventory', label: 'Stock & Inventory Catalog', icon: Boxes, badge: lowStockCount > 0 ? lowStockCount : undefined },
+        { id: 'add_product', label: 'Add Product', icon: PackagePlus },
+        {
+          id: 'inventory',
+          label: 'Stock Management',
+          icon: Boxes,
+          badge: lowStockCount > 0 ? lowStockCount : undefined,
+        },
       ],
     },
     {
-      sectionTitle: 'COMMERCIAL TRANSACTIONS',
+      sectionTitle: 'CUSTOMERS & COMPANIES',
       items: [
-        { id: 'sales', label: 'Sale (GST / Non-GST)', icon: TrendingUp },
-        { id: 'purchases', label: 'Purchase Invoices', icon: ShoppingCart },
-        { id: 'payments', label: 'Payment & Receipt Vouchers', icon: Receipt },
+        { id: 'customers', label: 'Customers', icon: Users },
+        { id: 'companies', label: 'Companies (Suppliers)', icon: Building },
+        { id: 'ledgers', label: 'All Ledgers', icon: BarChart3 },
+      ],
+    },
+    {
+      sectionTitle: 'VOUCHER REGISTERS',
+      items: [
+        { id: 'sales', label: 'Sales Register', icon: TrendingUp },
+        { id: 'purchases', label: 'Purchase Register', icon: ShoppingCart },
+        { id: 'payments', label: 'Payments & Receipts', icon: Receipt },
         { id: 'credit_debit', label: 'Credit / Debit Notes', icon: RotateCcw },
       ],
     },
     {
-      sectionTitle: 'PARTY DIRECTORIES',
+      sectionTitle: 'PRINT, FORMATS & REPORTS',
       items: [
-        { id: 'customers', label: 'Customers (Debtors)', icon: Users },
-        { id: 'companies', label: 'Companies (Creditors)', icon: Building },
-      ],
-    },
-    {
-      sectionTitle: 'BILLING & STATEMENTS',
-      items: [
-        { id: 'gst_bill', label: 'GST Invoice Generator', icon: FileCheck2 },
-        { id: 'gstr_reports', label: 'GSTR-1 & 3B Tax Returns', icon: FileSpreadsheet },
-        { id: 'profit_loss', label: 'Profit & Loss Statement', icon: TrendingUp },
-        { id: 'settings', label: 'Business Profile & Settings', icon: Settings },
+        { id: 'invoice_builder', label: 'Invoice Format Builder', icon: LayoutTemplate },
+        { id: 'gst_bill', label: 'Print Invoice Station', icon: FileCheck2 },
+        { id: 'gstr_reports', label: 'GSTR-1 & 3B Returns', icon: FileSpreadsheet },
+        { id: 'profit_loss', label: 'Profit & Loss', icon: TrendingUp },
+        { id: 'settings', label: 'Business Settings', icon: Settings },
       ],
     },
   ];
+
+  React.useEffect(() => {
+    const activeSec = navSections.find(sec => sec.items.some(it => it.id === activeModule));
+    if (activeSec) {
+      setOpenCategories(prev => (prev[activeSec.sectionTitle] ? prev : { ...prev, [activeSec.sectionTitle]: true }));
+    }
+  }, [activeModule]);
 
   const handleSelect = (id: ActiveModule) => {
     setActiveModule(id);
@@ -132,85 +142,64 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const renderNavContent = (isMobile: boolean = false) => (
     <div className="flex flex-col justify-between h-full text-xs">
-      <div className="p-3 space-y-3.5 overflow-y-auto">
+      <div className="p-3 space-y-4 overflow-y-auto">
         {navSections.map((sec, secIdx) => {
           const isOpen = isMobile ? Boolean(openCategories[sec.sectionTitle]) : true;
           const hasActiveChild = sec.items.some(it => it.id === activeModule);
 
           return (
             <div key={secIdx} className="space-y-1">
-              {/* Category Subfolder Header */}
               {isMobile ? (
                 <button
+                  type="button"
                   onClick={() => toggleCategory(sec.sectionTitle)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-left transition-all ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-colors ${
                     isOpen
-                      ? 'bg-slate-100/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 shadow-2xs'
-                      : 'bg-slate-50/60 dark:bg-slate-900/50 border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-slate-100/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700'
+                      : 'bg-white dark:bg-slate-900 border-slate-200/70 dark:border-slate-800'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-1 rounded-md ${isOpen ? 'bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'}`}>
-                      {isOpen ? (
-                        <FolderOpen className="w-4 h-4 shrink-0" />
-                      ) : (
-                        <Folder className="w-4 h-4 shrink-0" />
-                      )}
-                    </div>
-                    <span className={`text-[11px] font-bold uppercase tracking-wider ${hasActiveChild ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                      {sec.sectionTitle}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 font-bold">
-                      {sec.items.length}
-                    </span>
-                    {isOpen ? (
-                      <ChevronDown className="w-4 h-4 text-slate-500" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
-                    )}
-                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider ${
+                      hasActiveChild ? 'theme-text' : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {sec.sectionTitle}
+                  </span>
+                  {isOpen ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  )}
                 </button>
               ) : (
-                <div className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                <div className="px-2.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   {sec.sectionTitle}
                 </div>
               )}
 
-              {/* Subfolder Items / Links */}
               {isOpen && (
-                <div className={`space-y-1 ${isMobile ? 'pl-3.5 border-l-2 border-slate-200 dark:border-slate-800 ml-3 my-1' : ''}`}>
+                <div className={`space-y-0.5 ${isMobile ? 'pl-2 my-1' : ''}`}>
                   {sec.items.map(item => {
                     const Icon = item.icon;
                     const isActive = activeModule === item.id;
                     return (
                       <button
                         key={item.id}
+                        type="button"
                         onClick={() => handleSelect(item.id)}
-                        style={
+                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors text-left min-h-[36px] ${
                           isActive
-                            ? {
-                                backgroundColor: currentPreset.lightHex,
-                                color: currentPreset.primaryHex,
-                              }
-                            : undefined
-                        }
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all text-left min-h-[38px] ${
-                          isActive
-                            ? 'font-bold shadow-2xs'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                            ? 'theme-active-nav font-semibold'
+                            : 'font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          <Icon
-                            className="w-4 h-4 shrink-0 transition-colors"
-                            style={{ color: isActive ? currentPreset.primaryHex : undefined }}
-                          />
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'theme-text' : ''}`} />
                           <span className="truncate">{item.label}</span>
                         </div>
                         {item.badge !== undefined && (
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse">
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
                             {item.badge}
                           </span>
                         )}
@@ -224,15 +213,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </div>
 
-      {/* Footer Info */}
-      <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 text-[11px] text-slate-500 space-y-1 bg-slate-50/50 dark:bg-slate-900/30">
+      {/* Clean Footer Info */}
+      <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 space-y-1 bg-slate-50/70 dark:bg-slate-900/40 shrink-0">
         <div className="flex items-center justify-between">
-          <span>Currency:</span>
-          <span className="font-mono font-medium text-slate-700 dark:text-slate-300">INR (₹)</span>
+          <span>Currency</span>
+          <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">INR (₹)</span>
         </div>
         <div className="flex items-center justify-between">
-          <span>GST System:</span>
-          <span className="font-mono text-slate-700 dark:text-slate-300">Intra / Inter-State</span>
+          <span>Tax Regime</span>
+          <span className="font-mono text-slate-700 dark:text-slate-300">India GST</span>
         </div>
       </div>
     </div>
@@ -240,36 +229,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop Sidebar (hidden on mobile) */}
+      {/* Desktop Sidebar */}
       <aside className="no-print hidden lg:flex w-64 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col justify-between h-[calc(100vh-64px)] sticky top-16">
         {renderNavContent(false)}
       </aside>
 
-      {/* Mobile Drawer (visible when isMobileMenuOpen is true) */}
+      {/* Mobile Drawer */}
       {isMobileMenuOpen && (
         <div className="no-print lg:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setIsMobileMenuOpen(false)}
           />
 
-          {/* Drawer Content */}
-          <div className="relative w-72 max-w-[80vw] bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-200">
+          <div className="relative w-72 max-w-[82vw] bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col z-10">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                Menu &amp; Categories
+                {settings.name || 'Ghosh Agency'} Menu
               </span>
               <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {renderNavContent(true)}
-            </div>
+            <div className="flex-1 overflow-y-auto">{renderNavContent(true)}</div>
           </div>
         </div>
       )}

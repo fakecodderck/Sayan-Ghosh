@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FileText,
   Search,
@@ -18,6 +18,7 @@ import {
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher, VoucherType } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface InvoicesRegisterViewProps {
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
@@ -30,13 +31,25 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
   onOpenNewSale,
   onOpenNewPurchase,
 }) => {
-  const { vouchers, getLedgerById, deleteVoucher } = useAccounting();
+  const { vouchers, settings, getLedgerById, deleteVoucher } = useAccounting();
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'SALE' | 'PURCHASE' | 'NOTES'>('ALL');
   const [gstFilter, setGstFilter] = useState<'ALL' | 'GST' | 'NON_GST'>('ALL');
   const [selectedVoucherForDetails, setSelectedVoucherForDetails] = useState<TransactionVoucher | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [modalConfirmDelete, setModalConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedVoucherForDetails) {
+        setSelectedVoucherForDetails(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedVoucherForDetails]);
 
   // Filter all commercial goods invoices (Sales, Purchases, Credit & Debit Notes)
   const invoiceVouchers = useMemo(() => {
@@ -145,10 +158,14 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
     }
   };
 
-  const handleDeleteVoucher = (v: TransactionVoucher) => {
-    if (window.confirm(`Are you sure you want to delete invoice ${v.voucherNo}? This action will reverse inventory stock and ledger postings.`)) {
-      deleteVoucher(v.id);
-    }
+  const handleDownloadPdf = (v: TransactionVoucher) => {
+    const party = v.partyId ? getLedgerById(v.partyId) : undefined;
+    downloadInvoicePdf({
+      voucher: v,
+      settings,
+      party,
+      useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
+    });
   };
 
   return (
@@ -157,7 +174,7 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <FileText className="w-6 h-6 theme-text" />
             <span>Core Invoice Register</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -167,6 +184,7 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
+            type="button"
             onClick={onOpenNewPurchase}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
           >
@@ -174,6 +192,7 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
             <span>New Purchase Bill</span>
           </button>
           <button
+            type="button"
             onClick={onOpenNewSale}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs transition-all min-h-[38px]"
           >
@@ -190,10 +209,10 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Generated Invoices
           </p>
-          <p className="text-xl font-extrabold font-mono text-slate-900 dark:text-slate-100 mt-1">
+          <p className="text-xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
             {metrics.totalCount}
           </p>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
+          <span className="text-[10px] text-slate-400 tabular-nums mt-0.5 block">
             {metrics.salesCount} Sales · {metrics.purchaseCount} Purchases
           </span>
         </div>
@@ -203,10 +222,10 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Sales Value
           </p>
-          <p className="text-xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+          <p className="text-xl font-extrabold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
             {formatINR(metrics.salesTotal)}
           </p>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
+          <span className="text-[10px] text-slate-400 tabular-nums mt-0.5 block">
             GST Output: {formatINR(metrics.salesGst)}
           </span>
         </div>
@@ -216,10 +235,10 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Purchase Inward
           </p>
-          <p className="text-xl font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-1">
+          <p className="text-xl font-extrabold font-mono tabular-nums text-rose-600 dark:text-rose-400 mt-1">
             {formatINR(metrics.purchaseTotal)}
           </p>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
+          <span className="text-[10px] text-slate-400 tabular-nums mt-0.5 block">
             GST ITC Input: {formatINR(metrics.purchaseGst)}
           </span>
         </div>
@@ -229,7 +248,7 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Net Tax Position
           </p>
-          <p className="text-xl font-extrabold font-mono text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xl font-extrabold font-mono tabular-nums theme-text mt-1">
             {formatINR(Math.max(0, metrics.netGst))}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -263,11 +282,12 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
             ].map(tab => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setTypeFilter(tab.id as any)}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap min-h-[32px] ${
                   typeFilter === tab.id
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                    ? 'theme-bg text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 {tab.label}
@@ -277,32 +297,35 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
         </div>
 
         {/* Secondary GST Filter Toggle */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             <span className="font-semibold text-slate-600 dark:text-slate-400">Tax Type:</span>
             <div className="flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => setGstFilter('ALL')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                   gstFilter === 'ALL'
                     ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold'
-                    : 'text-slate-500 hover:text-slate-900'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 All
               </button>
               <button
+                type="button"
                 onClick={() => setGstFilter('GST')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                   gstFilter === 'GST'
-                    ? 'bg-blue-600 text-white font-bold'
-                    : 'text-slate-500 hover:text-slate-900'
+                    ? 'theme-bg text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                ✓ GST Tax Invoices
+                GST Tax Invoices
               </button>
               <button
+                type="button"
                 onClick={() => setGstFilter('NON_GST')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                   gstFilter === 'NON_GST'
@@ -354,10 +377,10 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
 
                   return (
                     <tr key={v.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                         {v.date}
                       </td>
-                      <td className="py-3 px-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                      <td className="py-3 px-3 font-mono tabular-nums font-bold theme-text whitespace-nowrap">
                         {v.voucherNo}
                       </td>
                       <td className="py-3 px-3">
@@ -373,49 +396,80 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
                           {party?.gstin ? `GSTIN: ${party.gstin}` : v.isGstBill ? 'Tax Invoice' : 'Bill of Supply'}
                         </p>
                       </td>
-                      <td className="py-3 px-3 text-center font-mono font-semibold text-slate-600 dark:text-slate-400">
+                      <td className="py-3 px-3 text-center font-mono tabular-nums font-semibold text-slate-600 dark:text-slate-400">
                         {v.items?.length || 0}
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-700 dark:text-slate-300">
+                      <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300">
                         {formatINR(v.subtotal)}
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-blue-600 dark:text-blue-400">
+                      <td className="py-3 px-3 text-right font-mono tabular-nums theme-text">
                         {formatINR(gstTotal)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-extrabold text-slate-950 dark:text-slate-100">
+                      <td className="py-3 px-4 text-right font-mono tabular-nums font-extrabold text-slate-950 dark:text-slate-100">
                         {formatINR(v.grandTotal)}
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* View Details Modal Button */}
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setSelectedVoucherForDetails(v)}
+                            onClick={() => {
+                              setSelectedVoucherForDetails(v);
+                              setModalConfirmDelete(false);
+                            }}
                             title="View Full Itemized Breakdown"
-                            className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-blue-950/50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+                            className="p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
 
-                          {/* Print & Download Modal Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadPdf(v)}
+                            title="Download PDF Invoice"
+                            className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 dark:text-slate-400 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/50 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => onSelectVoucherForPrint(v)}
-                            title="Print / Export PDF Invoice"
-                            className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 dark:text-slate-400 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+                            title="Print / Preview Invoice"
+                            className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
 
-                          {/* Delete Invoice Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteVoucher(v)}
-                            title="Delete Invoice"
-                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {confirmDeleteId === v.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  deleteVoucher(v.id);
+                                  setConfirmDeleteId(null);
+                                }}
+                                className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(v.id)}
+                              title="Delete Invoice"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -429,8 +483,14 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
 
       {/* Details View Modal */}
       {selectedVoucherForDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 my-8">
+        <div
+          onClick={() => setSelectedVoucherForDetails(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 my-8"
+          >
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <span className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider mb-1 ${getTypeBadge(selectedVoucherForDetails.type)}`}>
@@ -441,6 +501,7 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedVoucherForDetails(null)}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
               >
@@ -503,46 +564,76 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
             </div>
 
             {/* Totals Summary */}
-            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-mono text-xs">
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-mono tabular-nums text-xs">
               <div className="text-slate-500">
                 Taxable: {formatINR(selectedVoucherForDetails.subtotal)}
               </div>
-              <div className="text-base font-extrabold text-blue-600 dark:text-blue-400">
+              <div className="text-base font-extrabold theme-text">
                 Grand Total: {formatINR(selectedVoucherForDetails.grandTotal)}
               </div>
             </div>
 
             {/* Action toolbar */}
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => {
-                  const v = selectedVoucherForDetails;
-                  setSelectedVoucherForDetails(null);
-                  handleDeleteVoucher(v);
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Delete Invoice</span>
-              </button>
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
+              {modalConfirmDelete ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteVoucher(selectedVoucherForDetails.id);
+                      setModalConfirmDelete(false);
+                      setSelectedVoucherForDetails(null);
+                    }}
+                    className="px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
+                  >
+                    Confirm Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalConfirmDelete(false)}
+                    className="px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setModalConfirmDelete(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Invoice</span>
+                </button>
+              )}
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setSelectedVoucherForDetails(null)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 rounded-lg"
                 >
                   Close
                 </button>
                 <button
+                  type="button"
+                  onClick={() => handleDownloadPdf(selectedVoucherForDetails)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download PDF</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     const v = selectedVoucherForDetails;
                     setSelectedVoucherForDetails(null);
                     onSelectVoucherForPrint(v);
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  className="theme-bg theme-bg-hover flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-lg"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Print / Download Invoice</span>
+                  <span>Print Invoice</span>
                 </button>
               </div>
             </div>

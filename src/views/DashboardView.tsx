@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,30 +16,50 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
-  Sparkles,
   Printer,
-  Eye
+  Download
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { ActiveModule } from '../components/Sidebar';
 import { TransactionVoucher, VoucherType } from '../types/accounting';
-import { formatINR, computeGSTR1Summary, computeGSTR3BSummary } from '../utils/gstCalculations';
+import { formatINR, computeGSTR3BSummary } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface DashboardViewProps {
   onNavigate: (module: ActiveModule) => void;
+  onSelectCustomer?: (customerId: string) => void;
   onOpenNewVoucher: (type: VoucherType) => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
+  onSelectCustomer,
   onOpenNewVoucher,
   onSelectVoucherForPrint,
 }) => {
-  const { vouchers, ledgers, inventory, settings } = useAccounting();
+  const { vouchers, ledgers, inventory, settings, getLedgerById } = useAccounting();
   const [chartTimeframe, setChartTimeframe] = useState<'6M' | '3M' | '1Y'>('6M');
   const [showVoucherMenu, setShowVoucherMenu] = useState(false);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<{ monthIdx: number; type: 'sales' | 'purchases' } | null>(null);
+  const voucherMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (voucherMenuRef.current && !voucherMenuRef.current.contains(event.target as Node)) {
+        setShowVoucherMenu(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowVoucherMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   // Time & Greeting
   const today = new Date();
@@ -270,19 +290,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 1. Header Greeting & Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <span>{greetingTime}, {userName}!</span>
-            <span className="inline-block animate-wave text-2xl sm:text-3xl">👋</span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+            {greetingTime}, {userName}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Here's what's happening with your business today.
+            Business snapshot for {settings.name || 'Ghosh Agency'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Financial Year & Date Pill */}
+          {/* Financial Year & Date Display */}
           <div className="flex items-center gap-2.5 px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-            <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-lg">
+            <div className="p-1.5 theme-soft-badge rounded-lg">
               <Calendar className="w-4 h-4" />
             </div>
             <div className="text-left leading-tight">
@@ -292,10 +311,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Quick Create Voucher Dropdown Button */}
-          <div className="relative">
+          <div className="relative" ref={voucherMenuRef}>
             <button
+              type="button"
               onClick={() => setShowVoucherMenu(!showVoucherMenu)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]"
+              className="theme-bg theme-bg-hover flex items-center gap-2 px-4 py-2.5 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]"
             >
               <Plus className="w-4 h-4" />
               <span>Create Voucher</span>
@@ -534,7 +554,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div
                         onMouseEnter={() => setHoveredBarIndex({ monthIdx: idx, type: 'sales' })}
                         onMouseLeave={() => setHoveredBarIndex(null)}
-                        style={{ height: `${Math.max(4, salesHeight)}%` }}
+                        style={{ height: d.sales > 0 ? `${Math.max(4, salesHeight)}%` : '0%' }}
                         className="w-1/2 max-w-[28px] bg-blue-500 hover:bg-blue-600 rounded-t-sm sm:rounded-t-md transition-all duration-300 relative cursor-pointer"
                       />
 
@@ -542,7 +562,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div
                         onMouseEnter={() => setHoveredBarIndex({ monthIdx: idx, type: 'purchases' })}
                         onMouseLeave={() => setHoveredBarIndex(null)}
-                        style={{ height: `${Math.max(4, purchasesHeight)}%` }}
+                        style={{ height: d.purchases > 0 ? `${Math.max(4, purchasesHeight)}%` : '0%' }}
                         className="w-1/2 max-w-[28px] bg-emerald-500 hover:bg-emerald-600 rounded-t-sm sm:rounded-t-md transition-all duration-300 relative cursor-pointer"
                       />
                     </div>
@@ -560,11 +580,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Right: Business Highlights */}
         <div className="lg:col-span-4 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-lg">💡</span>
+          <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
               Business Highlights
             </h3>
+            <span className="text-[11px] font-medium text-slate-400">Live Summary</span>
           </div>
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
@@ -574,17 +594,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-lg">
+                <div className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
                   <Users className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Total Customers</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Customers</span>
+                  <span className="text-[10px] text-slate-400">Sundry Debtors</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {customerDebtors.length}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
-                  Debtors
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -596,17 +616,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-lg">
+                <div className="p-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg">
                   <Truck className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Total Suppliers</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Suppliers</span>
+                  <span className="text-[10px] text-slate-400">Sundry Creditors</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {supplierCreditors.length}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
-                  Creditors
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -618,17 +638,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded-lg">
+                <div className="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-lg">
                   <Boxes className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Total Products</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Products</span>
+                  <span className="text-[10px] text-slate-400">Catalog SKUs</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {totalProductsCount}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
-                  Items
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -640,17 +660,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 rounded-lg">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg">
                   <FileText className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Total Vouchers</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Vouchers</span>
+                  <span className="text-[10px] text-slate-400">Day Book Entries</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {vouchers.length}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
-                  Entries
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -662,17 +682,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 rounded-lg">
+                <div className="p-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-lg">
                   <Percent className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">GST Payable (This Month)</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Net GST Payable</span>
+                  <span className="text-[10px] text-slate-400">GSTR-3B Liability</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {formatINR(netGstPayable)}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
-                  GSTR-3B
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -684,17 +704,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 px-2 rounded-xl cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-teal-50 dark:bg-teal-950/40 text-teal-600 rounded-lg">
+                <div className="p-2 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-lg">
                   <Coins className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Stock Value</span>
+                <div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Stock Valuation</span>
+                  <span className="text-[10px] text-slate-400">At purchase cost</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5">
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {formatINR(totalStockValue)}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400">
-                  Valuation
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
@@ -717,14 +737,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </h3>
             </div>
             <button
+              type="button"
               onClick={() => onNavigate('daybook')}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs font-bold theme-text hover:underline flex items-center gap-1"
             >
               <span>View All</span>
             </button>
           </div>
 
-          <div className="w-full">
+          <div className="w-full overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -732,13 +753,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <th className="pb-2.5 font-medium px-1 sm:px-2">Type</th>
                   <th className="pb-2.5 font-medium px-1 sm:px-2 hidden sm:table-cell">Voucher No</th>
                   <th className="pb-2.5 font-medium px-1 sm:px-2">Party</th>
-                  <th className="pb-2.5 font-medium text-right pl-1 sm:pl-2">Amount</th>
+                  <th className="pb-2.5 font-medium text-right px-1 sm:px-2">Amount</th>
+                  <th className="pb-2.5 font-medium text-right pl-1">Doc</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {recentVouchers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
                       No transaction vouchers recorded yet.
                     </td>
                   </tr>
@@ -753,7 +775,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {v.date ? new Date(v.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'}
                       </td>
                       <td className="py-2.5 sm:py-3 px-1 sm:px-2">
-                        <span className={`inline-block px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold border ${getTypeBadge(v.type)}`}>
+                        <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold border ${getTypeBadge(v.type)}`}>
                           {getTypeName(v.type)}
                         </span>
                       </td>
@@ -761,10 +783,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {v.voucherNo}
                       </td>
                       <td className="py-2.5 sm:py-3 px-1 sm:px-2 font-medium text-slate-700 dark:text-slate-300 max-w-[80px] xs:max-w-[110px] sm:max-w-[140px] truncate text-[11px] sm:text-xs">
-                        {v.partyName || 'Cash / Direct'}
+                        {v.guestDetails?.name || v.partyName || 'Cash / Direct'}
                       </td>
-                      <td className="py-2.5 sm:py-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap text-[11px] sm:text-xs pl-1 sm:pl-2">
+                      <td className="py-2.5 sm:py-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap text-[11px] sm:text-xs px-1 sm:px-2">
                         {formatINR(v.grandTotal)}
+                      </td>
+                      <td className="py-2.5 sm:py-3 text-right pl-1 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="inline-flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            title="Download PDF"
+                            onClick={() =>
+                              downloadInvoicePdf({
+                                voucher: v,
+                                settings,
+                                party: v.partyId ? getLedgerById(v.partyId) : undefined,
+                                useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
+                              })
+                            }
+                            className="p-1.5 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-md"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Print / Preview"
+                            onClick={() => onSelectVoucherForPrint(v)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -778,7 +827,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="lg:col-span-6 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-lg">
+              <div className="p-1.5 theme-soft-badge rounded-lg">
                 <Users className="w-4 h-4" />
               </div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
@@ -786,8 +835,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </h3>
             </div>
             <button
+              type="button"
               onClick={() => onNavigate('customers')}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs font-bold theme-text hover:underline flex items-center gap-1"
             >
               <span>View All</span>
             </button>
@@ -813,7 +863,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   topCustomers.map(({ customer, totalSales, outstanding }) => (
                     <tr
                       key={customer.id}
-                      onClick={() => onNavigate('customers')}
+                      onClick={() => (onSelectCustomer ? onSelectCustomer(customer.id) : onNavigate('customers'))}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition-colors"
                     >
                       <td className="py-3 font-medium text-slate-800 dark:text-slate-200">
@@ -822,10 +872,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <p className="text-[10px] text-slate-400">{customer.phone || customer.gstin || 'Retail Customer'}</p>
                         </div>
                       </td>
-                      <td className="py-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                      <td className="py-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                         {formatINR(totalSales)}
                       </td>
-                      <td className="py-3 text-right font-mono font-bold whitespace-nowrap">
+                      <td className="py-3 text-right font-mono tabular-nums font-bold whitespace-nowrap">
                         <span className={outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}>
                           {formatINR(Math.abs(outstanding))}
                         </span>

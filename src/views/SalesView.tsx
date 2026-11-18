@@ -4,15 +4,13 @@ import {
   Search,
   Plus,
   Printer,
-  Trash2,
-  Calendar,
-  Filter,
-  CheckCircle2,
-  AlertCircle
+  Download,
+  Trash2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface SalesViewProps {
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
@@ -25,13 +23,14 @@ export const SalesView: React.FC<SalesViewProps> = ({
   onOpenNewSale,
   onNavigateToCustomer,
 }) => {
-  const { vouchers, ledgers, deleteVoucher } = useAccounting();
+  const { vouchers, ledgers, settings, getLedgerById, deleteVoucher } = useAccounting();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('ALL');
   const [selectedGstFilter, setSelectedGstFilter] = useState<'ALL' | 'WITH_GST' | 'WITHOUT_GST'>('ALL');
   const [selectedMode, setSelectedMode] = useState('ALL');
   const [selectedDate, setSelectedDate] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // All sales transactions
   const salesVouchers = useMemo(() => {
@@ -94,12 +93,6 @@ export const SalesView: React.FC<SalesViewProps> = ({
     return customers.reduce((acc, c) => acc + (c.currentBalance > 0 ? c.currentBalance : 0), 0);
   }, [customers]);
 
-  const handleDelete = (id: string, no: string) => {
-    if (confirm(`Are you sure you want to delete sales invoice ${no}? This will add items back to inventory stock.`)) {
-      deleteVoucher(id);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* View Header & Fast Creation Actions */}
@@ -116,6 +109,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => onOpenNewSale(undefined, false)}
             className="flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
           >
@@ -123,6 +117,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
             <span>+ Non-GST Sale</span>
           </button>
           <button
+            type="button"
             onClick={() => onOpenNewSale(undefined, true)}
             className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
           >
@@ -138,10 +133,10 @@ export const SalesView: React.FC<SalesViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Sales Revenue
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-1 truncate">
             {formatINR(totalSalesAmount)}
           </p>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
+          <span className="text-[10px] text-slate-400 tabular-nums mt-0.5 block">
             {filteredSales.length} Total Bills &amp; Invoices
           </span>
         </div>
@@ -150,7 +145,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             With GST vs Non-GST
           </p>
-          <div className="flex items-center justify-between text-xs font-mono font-bold mt-1">
+          <div className="flex items-center justify-between text-xs font-mono tabular-nums font-bold mt-1">
             <span className="text-emerald-600">{formatINR(gstSalesAmount)}</span>
             <span className="text-slate-300 dark:text-slate-700">/</span>
             <span className="text-amber-600">{formatINR(nonGstSalesAmount)}</span>
@@ -164,7 +159,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             GST Tax Collected
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-blue-600 dark:text-blue-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums theme-text mt-1 truncate">
             {formatINR(totalGstCollected)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -176,7 +171,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
           <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Customer Receivables
           </p>
-          <p className="text-base sm:text-lg font-bold font-mono text-rose-600 dark:text-rose-400 mt-1 truncate">
+          <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400 mt-1 truncate">
             {formatINR(totalReceivablesDue)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -203,16 +198,18 @@ export const SalesView: React.FC<SalesViewProps> = ({
           {/* GST Filter Toggle */}
           <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
             <button
+              type="button"
               onClick={() => setSelectedGstFilter('ALL')}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                 selectedGstFilter === 'ALL'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                  ? 'bg-white dark:bg-slate-700 theme-text shadow-xs font-semibold'
                   : 'text-slate-600 dark:text-slate-400'
               }`}
             >
               All Invoices
             </button>
             <button
+              type="button"
               onClick={() => setSelectedGstFilter('WITH_GST')}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                 selectedGstFilter === 'WITH_GST'
@@ -223,6 +220,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
               With GST
             </button>
             <button
+              type="button"
               onClick={() => setSelectedGstFilter('WITHOUT_GST')}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                 selectedGstFilter === 'WITHOUT_GST'
@@ -275,6 +273,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
 
           {(selectedCustomerId !== 'ALL' || selectedGstFilter !== 'ALL' || selectedMode !== 'ALL' || selectedDate || searchQuery) && (
             <button
+              type="button"
               onClick={() => {
                 setSelectedCustomerId('ALL');
                 setSelectedGstFilter('ALL');
@@ -282,7 +281,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
                 setSelectedDate('');
                 setSearchQuery('');
               }}
-              className="text-xs text-blue-600 hover:underline px-2 py-1"
+              className="text-xs theme-text font-semibold hover:underline px-2 py-1"
             >
               Reset Filters
             </button>
@@ -322,17 +321,18 @@ export const SalesView: React.FC<SalesViewProps> = ({
                     key={v.id}
                     className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {v.date}
                     </td>
-                    <td className="py-2.5 px-3 font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
                       {v.voucherNo}
                     </td>
                     <td className="py-2.5 px-3">
                       {v.partyId && onNavigateToCustomer ? (
                         <button
+                          type="button"
                           onClick={() => onNavigateToCustomer(v.partyId!)}
-                          className="font-semibold text-blue-600 dark:text-blue-400 hover:underline text-left truncate max-w-[220px] block"
+                          className="font-semibold theme-text hover:underline text-left truncate max-w-[220px] block"
                         >
                           {v.partyName || 'Cash Sale Customer'}
                         </button>
@@ -361,31 +361,70 @@ export const SalesView: React.FC<SalesViewProps> = ({
                     <td className="py-2.5 px-3 whitespace-nowrap font-mono text-slate-600 dark:text-slate-400">
                       {v.paymentMode}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                       {formatINR(v.subtotal)}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                       {formatINR(v.cgstTotal + v.sgstTotal + v.igstTotal)}
                     </td>
-                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-950 dark:text-slate-100 whitespace-nowrap">
+                    <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-slate-950 dark:text-slate-100 whitespace-nowrap">
                       {formatINR(v.grandTotal)}
                     </td>
                     <td className="py-2.5 px-3 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
                         <button
+                          type="button"
+                          onClick={() =>
+                            downloadInvoicePdf({
+                              voucher: v,
+                              settings,
+                              party: v.partyId ? getLedgerById(v.partyId) : undefined,
+                              useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
+                            })
+                          }
+                          title="Download PDF Invoice"
+                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onSelectVoucherForPrint(v)}
                           title="Print A5 / A4 Invoice"
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded min-w-[32px] min-h-[32px] flex items-center justify-center"
+                          className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(v.id, v.voucherNo)}
-                          title="Delete Invoice"
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded min-w-[32px] min-h-[32px] flex items-center justify-center"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {confirmDeleteId === v.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                deleteVoucher(v.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(v.id)}
+                            title="Delete Invoice"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

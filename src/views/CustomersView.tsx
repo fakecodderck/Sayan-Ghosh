@@ -1,34 +1,36 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   Search,
   Plus,
   ArrowLeft,
   Printer,
+  Download,
   Trash2,
   Edit2,
   Phone,
-  Mail,
   MapPin,
   Building,
-  CreditCard,
   Receipt,
-  FileCheck2,
   X,
-  TrendingUp,
-  DollarSign
+  TrendingUp
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { LedgerAccount, TransactionVoucher } from '../types/accounting';
+import { INDIAN_STATES, LedgerAccount, TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
+import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface CustomersViewProps {
+  initialCustomerId?: string;
+  onClearInitialCustomer?: () => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
   onOpenNewSale: (partyId: string, isGst?: boolean) => void;
   onOpenNewReceipt: (partyId: string) => void;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
+  initialCustomerId,
+  onClearInitialCustomer,
   onSelectVoucherForPrint,
   onOpenNewSale,
   onOpenNewReceipt,
@@ -36,15 +38,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const {
     ledgers,
     vouchers,
+    settings,
     addLedger,
     updateLedger,
     deleteLedger
   } = useAccounting();
 
-  const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null);
+  const defaultStateCode = settings.stateCode || '19';
+
+  const [activeCustomerId, setActiveCustomerId] = useState<string | null>(initialCustomerId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -53,10 +59,29 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [stateCode, setStateCode] = useState('27');
+  const [stateCode, setStateCode] = useState(defaultStateCode);
   const [creditLimit, setCreditLimit] = useState(100000);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [customerError, setCustomerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialCustomerId) {
+      setActiveCustomerId(initialCustomerId);
+      setConfirmDeleteId(null);
+    }
+  }, [initialCustomerId]);
+
+  useEffect(() => {
+    if (!showAddModal && !showEditModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAddModal(false);
+        setShowEditModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showAddModal, showEditModal]);
 
   // Filter only Sundry Debtors (Customers)
   const customers = useMemo(() => {
@@ -123,7 +148,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
-        stateCode: stateCode.trim() || '27',
+        stateCode: stateCode.trim() || defaultStateCode,
         creditLimit: Number(creditLimit) || 0,
         openingBalance: Number(openingBalance) || 0,
         currentBalance: Number(openingBalance) || 0,
@@ -139,29 +164,44 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const handleUpdateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCustomer || !name.trim()) return;
+    setCustomerError(null);
 
-    await updateLedger({
-      ...activeCustomer,
-      name: name.trim(),
-      contactPerson: contactPerson.trim() || undefined,
-      gstin: gstin.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      address: address.trim() || undefined,
-      stateCode: stateCode.trim() || '27',
-      creditLimit: Number(creditLimit) || 0,
-    });
+    try {
+      await updateLedger({
+        ...activeCustomer,
+        name: name.trim(),
+        contactPerson: contactPerson.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        address: address.trim() || undefined,
+        stateCode: stateCode.trim() || defaultStateCode,
+        creditLimit: Number(creditLimit) || 0,
+      });
 
-    setShowEditModal(false);
+      setShowEditModal(false);
+    } catch (err: any) {
+      setCustomerError(err.message || 'Failed to update customer profile');
+    }
   };
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (confirm('Are you sure you want to delete this customer account?')) {
+  const confirmDeleteCustomer = async (id: string) => {
+    try {
       await deleteLedger(id);
+      setConfirmDeleteId(null);
       if (activeCustomerId === id) {
         setActiveCustomerId(null);
+        onClearInitialCustomer?.();
       }
+    } catch {
+      setConfirmDeleteId(null);
     }
+  };
+
+  const handleBackToDirectory = () => {
+    setActiveCustomerId(null);
+    setConfirmDeleteId(null);
+    onClearInitialCustomer?.();
   };
 
   const resetForm = () => {
@@ -171,19 +211,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setPhone('');
     setEmail('');
     setAddress('');
-    setStateCode('27');
+    setStateCode(defaultStateCode);
     setCreditLimit(100000);
     setOpeningBalance(0);
+    setCustomerError(null);
   };
 
   const openEdit = (c: LedgerAccount) => {
+    setCustomerError(null);
     setName(c.name);
     setContactPerson(c.contactPerson || '');
     setGstin(c.gstin || '');
     setPhone(c.phone || '');
     setEmail(c.email || '');
     setAddress(c.address || '');
-    setStateCode(c.stateCode || '27');
+    setStateCode(c.stateCode || defaultStateCode);
     setCreditLimit(c.creditLimit || 100000);
     setShowEditModal(true);
   };
@@ -196,55 +238,83 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveCustomerId(null)}
+              type="button"
+              onClick={handleBackToDirectory}
               className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shadow-xs"
+              title="Back to Customer Directory"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                  {activeCustomer.name}
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-                  Customer
-                </span>
-              </div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                {activeCustomer.name}
+              </h2>
               <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                {activeCustomer.gstin ? `GSTIN: ${activeCustomer.gstin}` : 'Unregistered (B2C)'} · State: {activeCustomer.stateCode || '27'}
+                Customer · {activeCustomer.gstin ? `GSTIN: ${activeCustomer.gstin}` : 'Unregistered (B2C)'} · State: {activeCustomer.stateCode || defaultStateCode}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={() => onOpenNewSale(activeCustomer.id, false)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Non-GST Sale</span>
+              <span>Non-GST Sale</span>
             </button>
             <button
+              type="button"
               onClick={() => onOpenNewSale(activeCustomer.id, true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
+              className="flex items-center gap-1.5 px-3 py-2 theme-bg theme-bg-hover text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ GST Invoice</span>
+              <span>GST Invoice</span>
             </button>
             <button
+              type="button"
               onClick={() => onOpenNewReceipt(activeCustomer.id)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px]"
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
             >
               <Receipt className="w-3.5 h-3.5" />
-              <span>+ Record Payment</span>
+              <span>Record Payment</span>
             </button>
             <button
+              type="button"
               onClick={() => openEdit(activeCustomer)}
-              className="p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+              className="p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
               title="Edit Profile"
             >
               <Edit2 className="w-4 h-4" />
             </button>
+            {confirmDeleteId === activeCustomer.id ? (
+              <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => confirmDeleteCustomer(activeCustomer.id)}
+                  className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(activeCustomer.id)}
+                className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:bg-rose-950/40 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
+                title="Delete Customer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -254,7 +324,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Total Invoiced (Billed)
             </p>
-            <p className="text-xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-1">
+            <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               {formatINR(customerTotalBilled)}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -266,7 +336,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Total Money Paid (Receipts)
             </p>
-            <p className="text-xl font-bold font-mono text-teal-600 dark:text-teal-400 mt-1">
+            <p className="text-xl font-bold font-mono tabular-nums text-teal-600 dark:text-teal-400 mt-1">
               {formatINR(customerTotalPaid)}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -278,7 +348,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Current Balance Due
             </p>
-            <p className={`text-xl font-bold font-mono mt-1 ${activeCustomer.currentBalance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+            <p className={`text-xl font-bold font-mono tabular-nums mt-1 ${activeCustomer.currentBalance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {formatINR(Math.abs(activeCustomer.currentBalance))}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -290,7 +360,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Credit Limit
             </p>
-            <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+            <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
               {formatINR(activeCustomer.creditLimit || 0)}
             </p>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -363,7 +433,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <th className="py-2.5 px-4 w-32 text-right font-bold text-slate-900 dark:text-slate-100">
                       Amount (₹)
                     </th>
-                    <th className="py-2.5 px-3 w-20 text-center">Print</th>
+                    <th className="py-2.5 px-3 w-24 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -376,7 +446,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   ) : (
                     customerSales.map(v => (
                       <tr key={v.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                        <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {v.date}
                         </td>
                         <td className="py-2.5 px-3 font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
@@ -401,23 +471,34 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
                           {v.paymentMode}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {formatINR(v.subtotal)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
                           {formatINR(v.cgstTotal + v.sgstTotal + v.igstTotal)}
                         </td>
-                        <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {formatINR(v.grandTotal)}
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => onSelectVoucherForPrint(v)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
-                            title="Print A5 Invoice"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => downloadInvoicePdf({ voucher: v, settings, party: activeCustomer })}
+                              className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              title="Download PDF"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSelectVoucherForPrint(v)}
+                              className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              title="Print Invoice"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -491,18 +572,34 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
         {/* Edit Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8">
+          <div
+            onClick={() => setShowEditModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8"
+            >
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   Edit Customer Profile
                 </h3>
-                <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <form onSubmit={handleUpdateCustomer} className="space-y-4 text-xs">
+                {customerError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
+                    {customerError}
+                  </div>
+                )}
+
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                     Customer / Business Name *
@@ -512,7 +609,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     required
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
@@ -525,7 +622,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       type="text"
                       value={contactPerson}
                       onChange={e => setContactPerson(e.target.value)}
-                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
 
@@ -537,7 +634,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       type="text"
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
                 </div>
@@ -551,7 +648,38 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       type="text"
                       value={gstin}
                       onChange={e => setGstin(e.target.value.toUpperCase())}
-                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      State Jurisdiction
+                    </label>
+                    <select
+                      value={stateCode}
+                      onChange={e => setStateCode(e.target.value)}
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                    >
+                      {INDIAN_STATES.map(st => (
+                        <option key={st.code} value={st.code}>
+                          {st.name} ({st.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
 
@@ -563,7 +691,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       type="number"
                       value={creditLimit}
                       onChange={e => setCreditLimit(parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                     />
                   </div>
                 </div>
@@ -576,7 +704,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     rows={2}
                     value={address}
                     onChange={e => setAddress(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
@@ -584,13 +712,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-3.5 py-2 text-slate-600 bg-slate-100 rounded-lg"
+                    className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                    className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
                   >
                     Save Changes
                   </button>
@@ -610,7 +738,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600" />
+            <Users className="w-5 h-5 theme-text" />
             <span>Customers (Sundry Debtors)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -619,14 +747,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
 
         <button
+          type="button"
           onClick={() => {
             resetForm();
             setShowAddModal(true);
           }}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add New Customer</span>
+          <span>Add New Customer</span>
         </button>
       </div>
 
@@ -636,7 +765,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Total Customer Dues (Receivables)
           </p>
-          <p className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400 mt-1">
             {formatINR(totalReceivables)}
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -648,7 +777,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Registered Customers
           </p>
-          <p className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums theme-text mt-1">
             {customers.length} Accounts
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -660,7 +789,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Pending Balance Accounts
           </p>
-          <p className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+          <p className="text-xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400 mt-1">
             {customers.filter(c => c.currentBalance > 0).length} Parties
           </p>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -678,7 +807,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             placeholder="Search customer name, phone, GSTIN, city..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden"
+            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden theme-ring"
           />
         </div>
       </div>
@@ -697,7 +826,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <th className="py-2.5 px-4 w-36 text-right font-bold text-slate-900 dark:text-slate-100">
                   Current Due (₹)
                 </th>
-                <th className="py-2.5 px-3 w-36 text-center">Actions</th>
+                <th className="py-2.5 px-3 w-40 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -712,13 +841,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   const isDue = c.currentBalance > 0;
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                      <td className="py-2.5 px-4 text-center text-slate-400 font-mono">
+                      <td className="py-2.5 px-4 text-center text-slate-400 font-mono tabular-nums">
                         {idx + 1}
                       </td>
                       <td className="py-2.5 px-3">
                         <button
+                          type="button"
                           onClick={() => setActiveCustomerId(c.id)}
-                          className="font-semibold text-blue-600 dark:text-blue-400 hover:underline text-left block"
+                          className="font-semibold theme-text hover:underline text-left block"
                         >
                           {c.name}
                         </button>
@@ -734,11 +864,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
                         {c.gstin || 'Unregistered'}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-500">
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500">
                         {formatINR(c.creditLimit || 0)}
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap">
-                        <span className={isDue ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}>
+                      <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold whitespace-nowrap">
+                        <span className={isDue ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
                           {formatINR(Math.abs(c.currentBalance))}
                         </span>
                         <span className="text-[9px] uppercase font-bold text-slate-400 block">
@@ -748,25 +878,47 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
+                            type="button"
                             onClick={() => setActiveCustomerId(c.id)}
-                            className="px-2.5 py-1 text-[11px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded font-semibold border border-blue-200 dark:border-blue-800"
+                            className="px-2.5 py-1 text-[11px] theme-soft-badge rounded font-semibold hover:opacity-90"
                           >
                             View Page
                           </button>
                           <button
+                            type="button"
                             onClick={() => onOpenNewSale(c.id)}
                             title="New Invoice"
                             className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteCustomer(c.id)}
-                            title="Delete Customer"
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {confirmDeleteId === c.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => confirmDeleteCustomer(c.id)}
+                                className="px-2 py-0.5 text-[10px] font-bold bg-rose-600 text-white rounded"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(c.id)}
+                              title="Delete Customer"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -780,13 +932,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
       {/* Add Customer Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8">
+        <div
+          onClick={() => setShowAddModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4 my-8"
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Register New Customer Account
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -807,7 +969,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   placeholder="e.g. Metro Electricals Pvt Ltd"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -821,20 +983,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     placeholder="e.g. Ramesh Shah"
                     value={contactPerson}
                     onChange={e => setContactPerson(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Phone / Mobile *
+                    Phone / Mobile
                   </label>
                   <input
                     type="text"
                     placeholder="+91 98200 12345"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
               </div>
@@ -846,25 +1008,42 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="27ABCDE1234F1Z5"
+                    placeholder="19ABCDE1234F1Z5"
                     value={gstin}
                     onChange={e => setGstin(e.target.value.toUpperCase())}
-                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Email Address
+                    State Jurisdiction
                   </label>
-                  <input
-                    type="email"
-                    placeholder="billing@metroelec.in"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-                  />
+                  <select
+                    value={stateCode}
+                    onChange={e => setStateCode(e.target.value)}
+                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                  >
+                    {INDIAN_STATES.map(st => (
+                      <option key={st.code} value={st.code}>
+                        {st.name} ({st.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  placeholder="billing@metroelec.in"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                />
               </div>
 
               <div>
@@ -876,7 +1055,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   placeholder="Shop #, Street, Commercial Complex, City, Pincode"
                   value={address}
                   onChange={e => setAddress(e.target.value)}
-                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                 />
               </div>
 
@@ -890,7 +1069,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     step="any"
                     value={openingBalance}
                     onChange={e => setOpeningBalance(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
 
@@ -902,7 +1081,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     type="number"
                     value={creditLimit}
                     onChange={e => setCreditLimit(parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
                   />
                 </div>
               </div>
@@ -911,13 +1090,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-2 text-slate-600 bg-slate-100 rounded-lg"
+                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs"
+                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
                 >
                   Save Customer
                 </button>
