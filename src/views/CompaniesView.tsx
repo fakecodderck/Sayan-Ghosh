@@ -18,6 +18,7 @@ import { useAccounting } from '../context/AccountingContext';
 import { INDIAN_STATES, LedgerAccount, TransactionVoucher } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 import { downloadInvoicePdf } from '../utils/invoicePdf';
+import { GstinAutoFillPayload, GstinLookupField } from '../components/GstinLookupField';
 
 interface CompaniesViewProps {
   initialCompanyId?: string;
@@ -55,12 +56,20 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
   const [name, setName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [gstin, setGstin] = useState('');
+  const [pan, setPan] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [stateCode, setStateCode] = useState(defaultStateCode);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [companyError, setCompanyError] = useState<string | null>(null);
+
+  const handleApplyGstinDetails = (details: GstinAutoFillPayload) => {
+    if (details.stateCode) setStateCode(details.stateCode);
+    if (details.pan) setPan(details.pan);
+    if (details.businessName) setName(details.businessName);
+    if (details.address) setAddress(details.address);
+  };
 
   useEffect(() => {
     if (initialCompanyId) {
@@ -147,6 +156,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         group: 'Sundry Creditors',
         contactPerson: contactPerson.trim() || undefined,
         gstin: gstin.trim() || undefined,
+        pan: pan.trim() || undefined,
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
@@ -173,6 +183,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         name: name.trim(),
         contactPerson: contactPerson.trim() || undefined,
         gstin: gstin.trim() || undefined,
+        pan: pan.trim() || undefined,
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
@@ -208,6 +219,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
     setName('');
     setContactPerson('');
     setGstin('');
+    setPan('');
     setPhone('');
     setEmail('');
     setAddress('');
@@ -221,6 +233,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
     setName(c.name);
     setContactPerson(c.contactPerson || '');
     setGstin(c.gstin || '');
+    setPan(c.pan || '');
     setPhone(c.phone || '');
     setEmail(c.email || '');
     setAddress(c.address || '');
@@ -380,6 +393,9 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
               <p className="font-mono text-slate-800 dark:text-slate-200">
                 GSTIN: {activeCompany.gstin || 'Unregistered'}
               </p>
+              {activeCompany.pan && (
+                <p className="font-mono text-slate-500 text-[11px]">PAN: {activeCompany.pan}</p>
+              )}
               {activeCompany.email && (
                 <p className="text-slate-500 text-[11px] truncate">{activeCompany.email}</p>
               )}
@@ -605,18 +621,13 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      GSTIN (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={gstin}
-                      onChange={e => setGstin(e.target.value.toUpperCase())}
-                      className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
-                    />
-                  </div>
+                <div className="space-y-3">
+                  <GstinLookupField
+                    label="GSTIN (Optional — Verify & Auto-fill)"
+                    value={gstin}
+                    onChange={setGstin}
+                    onApplyDetails={handleApplyGstinDetails}
+                  />
 
                   <div>
                     <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
@@ -949,19 +960,14 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    GSTIN
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="19AABCH1234F1Z8"
-                    value={gstin}
-                    onChange={e => setGstin(e.target.value.toUpperCase())}
-                    className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
-                  />
-                </div>
+              <div className="space-y-3">
+                <GstinLookupField
+                  label="GSTIN (Verify & Auto-fill)"
+                  placeholder="19AABCH1234F1Z8"
+                  value={gstin}
+                  onChange={setGstin}
+                  onApplyDetails={handleApplyGstinDetails}
+                />
 
                 <div>
                   <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">

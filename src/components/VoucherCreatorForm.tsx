@@ -15,6 +15,8 @@ import { useAccounting } from '../context/AccountingContext';
 import {
   CustomerMode,
   INDIAN_STATES,
+  InventoryItem,
+  LedgerAccount,
   PaymentMode,
   TransactionVoucher,
   UnitType,
@@ -27,6 +29,8 @@ import {
   isInterStateTransaction
 } from '../utils/gstCalculations';
 import { downloadInvoicePdf } from '../utils/invoicePdf';
+import { AutocompleteInput } from './AutocompleteInput';
+import { GstinLookupField } from './GstinLookupField';
 
 interface VoucherCreatorFormProps {
   initialType?: VoucherType;
@@ -68,11 +72,16 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   // Customer selection mode: Existing | New | Guest (default Existing)
   const [customerMode, setCustomerMode] = useState<CustomerMode>('existing');
   const [partyId, setPartyId] = useState<string>(initialPartyId);
+  const [partyQuery, setPartyQuery] = useState<string>(() => {
+    if (!initialPartyId) return '';
+    return ledgers.find(l => l.id === initialPartyId)?.name || '';
+  });
 
   // New Customer inline creation fields
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustGstin, setNewCustGstin] = useState('');
+  const [newCustPan, setNewCustPan] = useState('');
   const [newCustStateCode, setNewCustStateCode] = useState(settings.stateCode || '19');
   const [newCustAddress, setNewCustAddress] = useState('');
 
@@ -95,21 +104,18 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   const isGoodsTransaction = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(type);
   const supportsCustomerModes = type === 'SALE' || type === 'CREDIT_NOTE';
 
-  const buildInitialItem = (overrideType: VoucherType = type, overrideGst: boolean = isGstBill): VoucherLineItem => {
-    const first = inventory[0];
-    const rate = first ? (overrideType === 'PURCHASE' ? first.purchasePrice : first.sellingPrice) : 0;
-    const gstRate = first ? first.gstRate : 18;
-    const calc = calculateLineItem(1, rate, 0, gstRate, false, overrideGst, false);
+  const buildInitialItem = (overrideGst: boolean = isGstBill): VoucherLineItem => {
+    const calc = calculateLineItem(1, 0, 0, 18, false, overrideGst, false);
     return {
-      itemId: first?.id || `manual_${Date.now()}`,
-      name: first?.name || '',
-      hsn: first?.hsnCode || '',
+      itemId: `manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: '',
+      hsn: '',
       qty: 1,
-      unit: first?.unit || 'Pcs',
-      rate,
+      unit: 'Pcs',
+      rate: 0,
       discount: 0,
       taxableAmount: calc.taxableAmount,
-      gstRate,
+      gstRate: 18,
       cgst: calc.cgst,
       sgst: calc.sgst,
       igst: calc.igst,
@@ -117,18 +123,16 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     };
   };
 
-  const [items, setItems] = useState<VoucherLineItem[]>(() => [buildInitialItem(initialType, initialIsGstBill)]);
+  const [items, setItems] = useState<VoucherLineItem[]>(() => [buildInitialItem(initialIsGstBill)]);
 
-  // Hydrate initial item once async Firestore inventory arrives if row is still pristine empty
+  // Sync displayed party name when partyId is set programmatically or async ledgers arrive
   useEffect(() => {
-    if (inventory.length === 0) return;
-    setItems(prev => {
-      if (prev.length === 1 && !prev[0].name.trim() && prev[0].rate === 0 && prev[0].itemId.startsWith('manual_')) {
-        return [buildInitialItem(type, isGstBill)];
-      }
-      return prev;
-    });
-  }, [inventory.length]);
+    if (!partyId) return;
+    const found = ledgers.find(l => l.id === partyId);
+    if (found) {
+      setPartyQuery(found.name);
+    }
+  }, [partyId, ledgers]);
 
   // Sync default state codes when async settings arrive
   useEffect(() => {
@@ -190,15 +194,69 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     }
   }, [customerMode, paymentMode]);
 
-  const eligibleParties = ledgers.filter(l => {
-    if (type === 'SALE' || type === 'RECEIPT' || type === 'CREDIT_NOTE') {
-      return l.group === 'Sundry Debtors';
+  const isPartyEligibleForType = (ledger: LedgerAccount, voucherType: VoucherType) => {
+    if (voucherType === 'SALE' || voucherType === 'RECEIPT' || voucherType === 'CREDIT_NOTE') {
+      return ledger.group === 'Sundry Debtors';
     }
-    if (type === 'PURCHASE' || type === 'PAYMENT' || type === 'DEBIT_NOTE') {
-      return l.group === 'Sundry Creditors' || l.group === 'Direct Expenses' || l.group === 'Indirect Expenses';
+    if (voucherType === 'PURCHASE' || voucherType === 'PAYMENT' || voucherType === 'DEBIT_NOTE') {
+      return (
+        ledger.group === 'Sundry Creditors' ||
+        ledger.group === 'Direct Expenses' ||
+        ledger.group === 'Indirect Expenses'
+      );
     }
     return true;
-  });
+  };
+
+  const eligibleParties = ledgers.filter(l => isPartyEligibleForType(l, type));
+
+  const filterParty = (ledger: LedgerAccount, q: string) =>
+    ledger.name.toLowerCase().includes(q) ||
+    (ledger.phone ? ledger.phone.toLowerCase().includes(q) : false) ||
+    (ledger.gstin ? ledger.gstin.toLowerCase().includes(q) : false) ||
+    ledger.group.toLowerCase().includes(q);
+
+  const rankParty = (ledger: LedgerAccount, q: string) => {
+    const name = ledger.name.toLowerCase();
+    if (name.startsWith(q)) return 0;
+    if (name.includes(q)) return 1;
+    return 2;
+  };
+
+  const handleSelectParty = (ledger: LedgerAccount) => {
+    setPartyId(ledger.id);
+    setPartyQuery(ledger.name);
+  };
+
+  const handlePartyQueryChange = (val: string) => {
+    setPartyQuery(val);
+    if (partyId) {
+      const current = ledgers.find(l => l.id === partyId);
+      if (!current || current.name !== val) {
+        setPartyId('');
+      }
+    }
+  };
+
+  const handleClearParty = () => {
+    setPartyId('');
+    setPartyQuery('');
+  };
+
+  const filterInventoryItem = (inv: InventoryItem, q: string) =>
+    inv.name.toLowerCase().includes(q) ||
+    (inv.sku ? inv.sku.toLowerCase().includes(q) : false) ||
+    (inv.hsnCode ? inv.hsnCode.toLowerCase().includes(q) : false) ||
+    (inv.category ? inv.category.toLowerCase().includes(q) : false);
+
+  const rankInventoryItem = (inv: InventoryItem, q: string) => {
+    const name = inv.name.toLowerCase();
+    const sku = (inv.sku || '').toLowerCase();
+    if (name.startsWith(q)) return 0;
+    if (sku && sku.startsWith(q)) return 1;
+    if (name.includes(q)) return 2;
+    return 3;
+  };
 
   const handleToggleGstBill = (val: boolean) => {
     setIsGstBill(val);
@@ -213,21 +271,10 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       const updated = [...prev];
       const current = { ...updated[index], [field]: value };
 
-      if (field === 'itemId') {
-        if (value === '__MANUAL__') {
+      if (field === 'name') {
+        const linkedInv = inventory.find(i => i.id === current.itemId);
+        if (linkedInv && linkedInv.name !== value) {
           current.itemId = `manual_${Date.now()}_${index}`;
-          current.name = '';
-          current.hsn = '';
-          current.rate = 0;
-        } else {
-          const inv = inventory.find(i => i.id === value);
-          if (inv) {
-            current.name = inv.name;
-            current.hsn = inv.hsnCode;
-            current.unit = inv.unit;
-            current.rate = type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice;
-            current.gstRate = inv.gstRate;
-          }
         }
       }
 
@@ -252,33 +299,83 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     });
   };
 
-  const addItemRow = (manual: boolean = false) => {
-    const inv = !manual ? inventory[0] : undefined;
-    const defaultRate = inv ? (type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice) : 0;
-    const defaultGst = inv ? inv.gstRate : 18;
+  const handleSelectInventoryItem = (index: number, inv: InventoryItem) => {
+    setItems(prev => {
+      const updated = [...prev];
+      const existing = updated[index];
+      const rate = type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice;
+      const calc = calculateLineItem(
+        Number(existing.qty) || 1,
+        rate,
+        Number(existing.discount) || 0,
+        inv.gstRate,
+        isInterState,
+        isGstBill,
+        isGstInclusive
+      );
 
-    const calc = calculateLineItem(
-      1,
-      defaultRate,
-      0,
-      defaultGst,
-      isInterState,
-      isGstBill,
-      isGstInclusive
-    );
+      updated[index] = {
+        ...existing,
+        itemId: inv.id,
+        name: inv.name,
+        hsn: inv.hsnCode,
+        unit: inv.unit,
+        rate,
+        gstRate: inv.gstRate,
+        taxableAmount: calc.taxableAmount,
+        cgst: calc.cgst,
+        sgst: calc.sgst,
+        igst: calc.igst,
+        total: calc.total,
+      };
+      return updated;
+    });
+  };
 
+  const handleClearItemName = (index: number) => {
+    setItems(prev => {
+      const updated = [...prev];
+      const existing = updated[index];
+      const calc = calculateLineItem(
+        Number(existing.qty) || 1,
+        0,
+        Number(existing.discount) || 0,
+        18,
+        isInterState,
+        isGstBill,
+        isGstInclusive
+      );
+      updated[index] = {
+        ...existing,
+        itemId: `manual_${Date.now()}_${index}`,
+        name: '',
+        hsn: '',
+        rate: 0,
+        gstRate: 18,
+        taxableAmount: calc.taxableAmount,
+        cgst: calc.cgst,
+        sgst: calc.sgst,
+        igst: calc.igst,
+        total: calc.total,
+      };
+      return updated;
+    });
+  };
+
+  const addItemRow = () => {
+    const calc = calculateLineItem(1, 0, 0, 18, isInterState, isGstBill, isGstInclusive);
     setItems(prev => [
       ...prev,
       {
-        itemId: inv?.id || `manual_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
-        name: inv?.name || '',
-        hsn: inv?.hsnCode || '',
+        itemId: `manual_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        name: '',
+        hsn: '',
         qty: 1,
-        unit: inv?.unit || 'Pcs',
-        rate: defaultRate,
+        unit: 'Pcs',
+        rate: 0,
         discount: 0,
         taxableAmount: calc.taxableAmount,
-        gstRate: defaultGst,
+        gstRate: 18,
         cgst: calc.cgst,
         sgst: calc.sgst,
         igst: calc.igst,
@@ -332,12 +429,34 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       return;
     }
 
-    if ((type === 'PAYMENT' || type === 'RECEIPT') && !partyId) {
-      setFormError('Please select a party account.');
+    let matchedPartyId = partyId;
+    let matchedPartyName = selectedParty?.name;
+
+    if (!matchedPartyId && partyQuery.trim() && (!supportsCustomerModes || customerMode === 'existing')) {
+      const exactMatch = eligibleParties.find(
+        l => l.name.toLowerCase() === partyQuery.trim().toLowerCase()
+      );
+      if (exactMatch) {
+        matchedPartyId = exactMatch.id;
+        matchedPartyName = exactMatch.name;
+      }
+    }
+
+    if (!supportsCustomerModes && !matchedPartyId) {
+      setFormError(
+        type === 'PURCHASE' || type === 'PAYMENT' || type === 'DEBIT_NOTE'
+          ? 'Please select a company / supplier from suggestions.'
+          : 'Please select a customer account from suggestions.'
+      );
       return;
     }
 
-    if (supportsCustomerModes && customerMode === 'existing' && paymentMode === 'CREDIT' && !partyId) {
+    if (supportsCustomerModes && customerMode === 'existing' && partyQuery.trim() && !matchedPartyId) {
+      setFormError('Please click a suggested customer from the list, or switch to New / Guest Customer.');
+      return;
+    }
+
+    if (supportsCustomerModes && customerMode === 'existing' && paymentMode === 'CREDIT' && !matchedPartyId) {
       setFormError('Please select an Existing Customer for Credit sales, or switch to Guest Customer.');
       return;
     }
@@ -349,8 +468,8 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
 
     setIsSubmitting(true);
     try {
-      let resolvedPartyId: string | undefined = partyId || undefined;
-      let resolvedPartyName: string | undefined = selectedParty?.name;
+      let resolvedPartyId: string | undefined = matchedPartyId || undefined;
+      let resolvedPartyName: string | undefined = matchedPartyName;
 
       // Handle New Customer mode: create Sundry Debtors ledger automatically
       if (supportsCustomerModes && customerMode === 'new') {
@@ -359,6 +478,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
           group: 'Sundry Debtors',
           phone: newCustPhone.trim() || undefined,
           gstin: newCustGstin.trim().toUpperCase() || undefined,
+          pan: newCustPan.trim().toUpperCase() || undefined,
           stateCode: newCustStateCode || settings.stateCode || '19',
           address: newCustAddress.trim() || undefined,
           openingBalance: 0,
@@ -417,13 +537,15 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       setReferenceNo('');
       setNotes('');
       setDirectAmount(0);
-      setItems([buildInitialItem(type, isGstBill)]);
+      setItems([buildInitialItem(isGstBill)]);
       if (customerMode === 'new') {
         setCustomerMode('existing');
         setPartyId(resolvedPartyId || '');
+        setPartyQuery(resolvedPartyName || '');
         setNewCustName('');
         setNewCustPhone('');
         setNewCustGstin('');
+        setNewCustPan('');
         setNewCustAddress('');
       }
 
@@ -516,6 +638,15 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                   setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
                   if (tab.key !== 'SALE' && tab.key !== 'CREDIT_NOTE') {
                     setCustomerMode('existing');
+                  }
+                  if (partyId) {
+                    const currentParty = ledgers.find(l => l.id === partyId);
+                    if (!currentParty || !isPartyEligibleForType(currentParty, tab.key)) {
+                      setPartyId('');
+                      setPartyQuery('');
+                    }
+                  } else {
+                    setPartyQuery('');
                   }
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap min-h-[32px] ${
@@ -646,7 +777,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 onClick={() => setCustomerMode('existing')}
                 className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
                   customerMode === 'existing'
-                    ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
+                    ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
@@ -681,23 +812,77 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
           </div>
 
           {customerMode === 'existing' && (
-            <div>
-              <select
-                value={partyId}
-                onChange={e => setPartyId(e.target.value)}
-                className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
-              >
-                <option value="">
-                  {eligibleParties.length > 0
-                    ? 'Select Existing Customer Ledger...'
-                    : 'No saved customers yet — switch to New Customer or Guest'}
-                </option>
-                {eligibleParties.map(l => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} {l.phone ? `(${l.phone})` : ''} · Bal: {formatINR(l.currentBalance)}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-1.5">
+              <AutocompleteInput<LedgerAccount>
+                value={partyQuery}
+                onChange={handlePartyQueryChange}
+                items={eligibleParties}
+                filterItem={filterParty}
+                rankItem={rankParty}
+                getItemKey={l => l.id}
+                onSelect={handleSelectParty}
+                onClear={handleClearParty}
+                isSelected={Boolean(selectedParty)}
+                selectedTitle="Saved customer ledger linked"
+                showSearchIcon
+                ariaLabel="Search existing customer"
+                placeholder={
+                  eligibleParties.length > 0
+                    ? 'Start typing customer name, phone, or GSTIN...'
+                    : 'No saved customers yet — switch to New Customer or Guest'
+                }
+                inputClassName="py-2.5 font-medium"
+                renderItem={l => (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        {l.name}
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        {[l.phone, l.gstin ? `GSTIN: ${l.gstin}` : ''].filter(Boolean).join(' · ') || l.group}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 font-mono tabular-nums text-[11px]">
+                      <div className="text-slate-400 text-[10px]">Balance</div>
+                      <div className="font-semibold text-slate-700 dark:text-slate-200">
+                        {formatINR(l.currentBalance)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                emptyState={
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
+                    <span className="text-slate-500 dark:text-slate-400">
+                      No saved customer matching &ldquo;{partyQuery.trim()}&rdquo;
+                    </span>
+                    <button
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setNewCustName(partyQuery.trim());
+                        setPartyId('');
+                        setCustomerMode('new');
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold theme-soft-badge hover:opacity-90 shrink-0"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Add as New Customer</span>
+                    </button>
+                  </div>
+                }
+              />
+              {selectedParty && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                  <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                    Selected: {selectedParty.name}
+                  </span>
+                  {selectedParty.phone && <span className="font-mono">{selectedParty.phone}</span>}
+                  <span className="font-mono tabular-nums">
+                    Bal: {formatINR(selectedParty.currentBalance)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -744,19 +929,21 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                  GSTIN (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="19ABCDE1234F1Z5"
+              <div className="sm:col-span-2">
+                <GstinLookupField
+                  compact
+                  label="GSTIN (Optional — Verify & Auto-fill)"
                   value={newCustGstin}
-                  onChange={e => setNewCustGstin(e.target.value.toUpperCase())}
-                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
+                  onChange={setNewCustGstin}
+                  onApplyDetails={details => {
+                    if (details.stateCode) setNewCustStateCode(details.stateCode);
+                    if (details.pan) setNewCustPan(details.pan);
+                    if (details.businessName) setNewCustName(details.businessName);
+                    if (details.address) setNewCustAddress(details.address);
+                  }}
                 />
               </div>
-              <div className="sm:col-span-3">
+              <div className="sm:col-span-2">
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Billing Address (Optional)
                 </label>
@@ -813,19 +1000,21 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                  Guest GSTIN (Optional)
-                </label>
-                <input
-                  type="text"
+              <div className="sm:col-span-2">
+                <GstinLookupField
+                  compact
+                  label="Guest GSTIN (Optional — Verify & Auto-fill)"
                   placeholder="Unregistered B2C"
                   value={guestGstin}
-                  onChange={e => setGuestGstin(e.target.value.toUpperCase())}
-                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
+                  onChange={setGuestGstin}
+                  onApplyDetails={details => {
+                    if (details.stateCode) setGuestStateCode(details.stateCode);
+                    if (details.businessName) setGuestName(details.businessName);
+                    if (details.address) setGuestAddress(details.address);
+                  }}
                 />
               </div>
-              <div className="sm:col-span-3">
+              <div className="sm:col-span-2">
                 <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
                   Address (Optional)
                 </label>
@@ -841,32 +1030,76 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
           )}
         </div>
       ) : (
-        <div>
+        <div className="space-y-1.5">
           <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
             {type === 'PURCHASE' || type === 'PAYMENT' || type === 'DEBIT_NOTE'
               ? 'Company / Supplier Account *'
               : 'Customer Ledger Account *'}
           </label>
-          <select
-            required
-            value={partyId}
-            onChange={e => setPartyId(e.target.value)}
-            className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
-          >
-            <option value="">Select Ledger Account...</option>
-            {eligibleParties.map(l => (
-              <option key={l.id} value={l.id}>
-                {l.name} ({l.group}) - Bal: {formatINR(l.currentBalance)}
-              </option>
-            ))}
-          </select>
+          <AutocompleteInput<LedgerAccount>
+            value={partyQuery}
+            onChange={handlePartyQueryChange}
+            items={eligibleParties}
+            filterItem={filterParty}
+            rankItem={rankParty}
+            getItemKey={l => l.id}
+            onSelect={handleSelectParty}
+            onClear={handleClearParty}
+            isSelected={Boolean(selectedParty)}
+            selectedTitle="Ledger account linked"
+            showSearchIcon
+            ariaLabel={
+              type === 'PURCHASE' || type === 'PAYMENT' || type === 'DEBIT_NOTE'
+                ? 'Search company or supplier account'
+                : 'Search customer ledger account'
+            }
+            placeholder={
+              type === 'PURCHASE' || type === 'PAYMENT' || type === 'DEBIT_NOTE'
+                ? 'Start typing company / supplier name...'
+                : 'Start typing customer name...'
+            }
+            inputClassName="py-2.5 font-medium"
+            renderItem={l => (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                    {l.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    {[l.group, l.phone].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <div className="text-right shrink-0 font-mono tabular-nums text-[11px]">
+                  <div className="text-slate-400 text-[10px]">Balance</div>
+                  <div className="font-semibold text-slate-700 dark:text-slate-200">
+                    {formatINR(l.currentBalance)}
+                  </div>
+                </div>
+              </div>
+            )}
+            emptyState={
+              <span className="text-slate-500 dark:text-slate-400">
+                No matching ledger account for &ldquo;{partyQuery.trim()}&rdquo;
+              </span>
+            }
+          />
+          {selectedParty && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 px-1">
+              <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                Selected: {selectedParty.name} ({selectedParty.group})
+              </span>
+              <span className="font-mono tabular-nums">
+                Bal: {formatINR(selectedParty.currentBalance)}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
       {/* Place of Supply Info Bar */}
       {isGoodsTransaction && (
-        <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-lg text-xs text-blue-800 dark:text-blue-300">
-          <Building className="w-4 h-4 shrink-0" />
+        <div className="flex items-center gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-lg text-xs text-slate-700 dark:text-slate-300">
+          <Building className="w-4 h-4 shrink-0 theme-text" />
           <span>
             Place of Supply: <strong>State {effectivePartyStateCode || settings.stateCode}</strong> · Tax Mode:{' '}
             <strong>
@@ -884,33 +1117,21 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
             <h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Bill Particulars &amp; Line Items
             </h4>
-            <div className="flex items-center gap-2">
-              {inventory.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => addItemRow(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-50"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Manual Item</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => addItemRow(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-md transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Line Item</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-md transition-colors whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Line Item</span>
+            </button>
           </div>
 
           <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs min-w-[660px]">
+            <table className="w-full text-left border-collapse text-xs min-w-[680px]">
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase font-semibold text-[10px]">
                 <tr>
-                  <th className="py-2 px-3">Item Name</th>
+                  <th className="py-2 px-3 min-w-[210px]">Item Name</th>
                   <th className="py-2 px-2 w-20">HSN</th>
                   <th className="py-2 px-2 w-20">Qty</th>
                   <th className="py-2 px-2 w-20">Unit</th>
@@ -927,41 +1148,61 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                   const isCatalogItem = inventory.some(i => i.id === row.itemId);
                   return (
                     <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="py-2 px-3 space-y-1">
-                        {inventory.length > 0 && isCatalogItem ? (
-                          <select
-                            value={row.itemId}
-                            onChange={e => handleItemChange(idx, 'itemId', e.target.value)}
-                            className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 font-medium"
-                          >
-                            {inventory.map(inv => (
-                              <option key={inv.id} value={inv.id}>
-                                {inv.name} (Stock: {inv.currentStock} {inv.unit})
-                              </option>
-                            ))}
-                            <option value="__MANUAL__">+ Enter Custom / Manual Item</option>
-                          </select>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              placeholder="Item Name / Description..."
-                              value={row.name}
-                              onChange={e => handleItemChange(idx, 'name', e.target.value)}
-                              className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 font-medium"
-                            />
-                            {inventory.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleItemChange(idx, 'itemId', inventory[0].id)}
-                                className="px-1.5 py-1 text-[10px] text-blue-600 hover:bg-blue-50 rounded shrink-0"
-                                title="Switch back to catalog product"
-                              >
-                                Catalog
-                              </button>
-                            )}
-                          </div>
-                        )}
+                      <td className="py-2 px-3">
+                        <AutocompleteInput<InventoryItem>
+                          value={row.name}
+                          onChange={val => handleItemChange(idx, 'name', val)}
+                          items={inventory}
+                          filterItem={filterInventoryItem}
+                          rankItem={rankInventoryItem}
+                          getItemKey={inv => inv.id}
+                          onSelect={inv => handleSelectInventoryItem(idx, inv)}
+                          onClear={() => handleClearItemName(idx)}
+                          isSelected={isCatalogItem}
+                          selectedTitle="Linked to inventory catalog"
+                          minDropdownWidth={340}
+                          ariaLabel={`Product name for row ${idx + 1}`}
+                          placeholder="Type product name or SKU..."
+                          inputClassName="py-1.5 font-medium rounded-md border-slate-200 dark:border-slate-700"
+                          renderItem={inv => {
+                            const price =
+                              type === 'PURCHASE' ? inv.purchasePrice : inv.sellingPrice;
+                            const isLowStock = inv.currentStock <= inv.minStockAlert;
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                    {inv.name}
+                                  </span>
+                                  <span className="font-mono tabular-nums font-semibold text-slate-800 dark:text-slate-200 shrink-0">
+                                    {formatINR(price)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                  <span className="truncate font-mono">
+                                    {[inv.sku, inv.hsnCode ? `HSN ${inv.hsnCode}` : '']
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </span>
+                                  <span
+                                    className={`font-mono tabular-nums shrink-0 ${
+                                      isLowStock
+                                        ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    Stock: {inv.currentStock} {inv.unit}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }}
+                          emptyState={
+                            <span className="text-slate-500 dark:text-slate-400">
+                              No catalog match — will be billed as custom item &ldquo;{row.name.trim()}&rdquo;
+                            </span>
+                          }
+                        />
                       </td>
                       <td className="py-2 px-2">
                         <input
@@ -1030,10 +1271,10 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                           <option value="28">28%</option>
                         </select>
                       </td>
-                      <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
+                      <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400">
                         {row.taxableAmount.toFixed(2)}
                       </td>
-                      <td className="py-2 px-3 text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
+                      <td className="py-2 px-3 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100">
                         {row.total.toFixed(2)}
                       </td>
                       <td className="py-2 px-2 text-center">
@@ -1122,7 +1363,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono text-xs">
+        <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono tabular-nums text-xs">
           <div className="flex justify-between text-slate-600 dark:text-slate-400">
             <span>Taxable Subtotal:</span>
             <span className="font-semibold">{formatINR(subtotal)}</span>

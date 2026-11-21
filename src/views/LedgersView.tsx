@@ -11,6 +11,7 @@ import { useAccounting } from '../context/AccountingContext';
 import { INDIAN_STATES, LedgerAccount, LedgerGroup } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 import { SYSTEM_LEDGER_DEFINITIONS } from '../utils/doubleEntryEngine';
+import { GstinLookupField } from '../components/GstinLookupField';
 
 export const LedgersView: React.FC = () => {
   const { ledgers, vouchers, settings, addLedger, updateLedger, deleteLedger } = useAccounting();
@@ -31,6 +32,7 @@ export const LedgersView: React.FC = () => {
   const [newLedgerName, setNewLedgerName] = useState('');
   const [newLedgerGroup, setNewLedgerGroup] = useState<LedgerGroup>('Sundry Debtors');
   const [newGstin, setNewGstin] = useState('');
+  const [newPan, setNewPan] = useState('');
   const [newStateCode, setNewStateCode] = useState(defaultStateCode);
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -140,6 +142,7 @@ export const LedgersView: React.FC = () => {
     setNewLedgerName('');
     setNewLedgerGroup('Sundry Debtors');
     setNewGstin('');
+    setNewPan('');
     setNewStateCode(defaultStateCode);
     setNewPhone('');
     setNewEmail('');
@@ -155,6 +158,7 @@ export const LedgersView: React.FC = () => {
     setNewLedgerName(ledger.name);
     setNewLedgerGroup(ledger.group);
     setNewGstin(ledger.gstin || '');
+    setNewPan(ledger.pan || '');
     setNewStateCode(ledger.stateCode || defaultStateCode);
     setNewPhone(ledger.phone || '');
     setNewEmail(ledger.email || '');
@@ -176,6 +180,7 @@ export const LedgersView: React.FC = () => {
           name: newLedgerName.trim(),
           group: newLedgerGroup,
           gstin: newGstin.trim() || undefined,
+          pan: newPan.trim() || undefined,
           stateCode: newStateCode.trim() || undefined,
           phone: newPhone.trim() || undefined,
           email: newEmail.trim() || undefined,
@@ -187,6 +192,7 @@ export const LedgersView: React.FC = () => {
           name: newLedgerName.trim(),
           group: newLedgerGroup,
           gstin: newGstin.trim() || undefined,
+          pan: newPan.trim() || undefined,
           stateCode: newStateCode.trim() || undefined,
           phone: newPhone.trim() || undefined,
           email: newEmail.trim() || undefined,
@@ -555,15 +561,17 @@ export const LedgersView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    GSTIN / UIN
-                  </label>
-                  <input
-                    type="text"
+                  <GstinLookupField
+                    label="GSTIN / UIN (Verify & Auto-fill)"
                     placeholder="19AAACB1234F1Z8"
                     value={newGstin}
-                    onChange={e => setNewGstin(e.target.value.toUpperCase())}
-                    className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 theme-ring"
+                    onChange={setNewGstin}
+                    onApplyDetails={details => {
+                      if (details.stateCode) setNewStateCode(details.stateCode);
+                      if (details.pan) setNewPan(details.pan);
+                      if (details.businessName) setNewLedgerName(details.businessName);
+                      if (details.address) setNewAddress(details.address);
+                    }}
                   />
                 </div>
               </div>

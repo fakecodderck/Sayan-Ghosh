@@ -169,9 +169,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Direct passwordless Firebase Firestore real-time synchronization
   useEffect(() => {
-    testConnection().then(connected => {
-      setIsFirebaseConnected(connected);
-    });
+    let isMounted = true;
+
+    const verifyConnection = () => {
+      testConnection().then(connected => {
+        if (isMounted) {
+          setIsFirebaseConnected(connected);
+          if (connected) {
+            setIsSyncing(false);
+          }
+        }
+      });
+    };
+
+    verifyConnection();
+    window.addEventListener('online', verifyConnection);
+    const handleOffline = () => {
+      if (isMounted) setIsFirebaseConnected(false);
+    };
+    window.addEventListener('offline', handleOffline);
 
     setIsSyncing(true);
 
@@ -239,6 +255,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_LEDGERS, 'true');
           setLedgers(ensureSystemLedgers(cloudLedgers, latestSettingsRef.current.id));
         }
+
+        if (!snapshot.metadata.fromCache) {
+          setIsFirebaseConnected(true);
+          setIsSyncing(false);
+        }
       },
       error => {
         try {
@@ -269,6 +290,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         } else if (cloudInventory.length > 0 || !snapshot.metadata.fromCache) {
           localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_INVENTORY, 'true');
           setInventory(cloudInventory);
+        }
+
+        if (!snapshot.metadata.fromCache) {
+          setIsFirebaseConnected(true);
+          setIsSyncing(false);
         }
       },
       error => {
@@ -313,6 +339,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             console.warn('Initial settings seed failed:', err)
           );
         }
+
+        if (!snapshot.metadata.fromCache) {
+          setIsFirebaseConnected(true);
+          setIsSyncing(false);
+        }
       },
       error => {
         try {
@@ -324,6 +355,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
 
     return () => {
+      isMounted = false;
+      window.removeEventListener('online', verifyConnection);
+      window.removeEventListener('offline', handleOffline);
       unsubVouchers();
       unsubLedgers();
       unsubInventory();
