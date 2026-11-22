@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, FileCheck } from 'lucide-react';
+import { X, FileCheck, Edit2 } from 'lucide-react';
 import { TransactionVoucher, VoucherType } from '../types/accounting';
 import { VoucherCreatorForm } from './VoucherCreatorForm';
 
@@ -7,6 +7,7 @@ interface NewVoucherModalProps {
   initialType?: VoucherType;
   initialPartyId?: string;
   initialIsGstBill?: boolean;
+  editingVoucher?: TransactionVoucher;
   onClose: () => void;
   onSuccess?: (voucher: TransactionVoucher, shouldPrint?: boolean) => void;
 }
@@ -15,9 +16,12 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
   initialType = 'SALE',
   initialPartyId = '',
   initialIsGstBill = true,
+  editingVoucher,
   onClose,
   onSuccess,
 }) => {
+  const isEditMode = Boolean(editingVoucher);
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -40,14 +44,16 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
           <div className="flex items-center gap-2.5">
             <div className="p-2 theme-soft-badge rounded-lg shrink-0">
-              <FileCheck className="w-5 h-5" />
+              {isEditMode ? <Edit2 className="w-5 h-5" /> : <FileCheck className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-                New Transaction Voucher
+                {isEditMode ? `Edit Invoice #${editingVoucher?.voucherNo}` : 'New Invoice'}
               </h3>
               <p className="text-[11px] text-slate-500">
-                Double-Entry Posting &amp; Auto Inventory Balance
+                {isEditMode
+                  ? 'Changes automatically recalculate ledger balances & inventory stock in Firebase'
+                  : 'Double-Entry Posting & Auto Inventory Balance'}
               </p>
             </div>
           </div>
@@ -63,9 +69,11 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
 
         <div className="p-4 sm:p-6 max-h-[82vh] overflow-y-auto">
           <VoucherCreatorForm
+            key={editingVoucher ? `edit_${editingVoucher.id}` : `new_${initialType}_${initialPartyId}`}
             initialType={initialType}
             initialPartyId={initialPartyId}
             initialIsGstBill={initialIsGstBill}
+            editingVoucher={editingVoucher}
             onCancel={onClose}
             onSuccess={(voucher, shouldPrint) => {
               if (onSuccess) onSuccess(voucher, shouldPrint);

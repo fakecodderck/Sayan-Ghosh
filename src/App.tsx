@@ -10,6 +10,7 @@ import { InvoicesRegisterView } from './views/InvoicesRegisterView';
 import { PurchasesView } from './views/PurchasesView';
 import { SalesView } from './views/SalesView';
 import { InventoryView } from './views/InventoryView';
+import { StockReportView } from './views/StockReportView';
 import { AddProductView } from './views/AddProductView';
 import { CreateInvoiceView } from './views/CreateInvoiceView';
 import { InvoiceBuilderView } from './views/InvoiceBuilderView';
@@ -30,6 +31,7 @@ function MainApp() {
   const { settings, lastError, clearError } = useAccounting();
   const [activeModule, setActiveModule] = useState<ActiveModule>('dashboard');
   const [showNewVoucherModal, setShowNewVoucherModal] = useState(false);
+  const [editingVoucher, setEditingVoucher] = useState<TransactionVoucher | null>(null);
   const [voucherModalType, setVoucherModalType] = useState<VoucherType>('SALE');
   const [voucherModalPartyId, setVoucherModalPartyId] = useState<string>('');
   const [voucherModalIsGstBill, setVoucherModalIsGstBill] = useState<boolean>(true);
@@ -65,7 +67,17 @@ function MainApp() {
     setPrintingVoucher(voucher);
   };
 
+  const handleOpenEditVoucher = (voucher: TransactionVoucher) => {
+    setPrintingVoucher(null);
+    setEditingVoucher(voucher);
+    setVoucherModalType(voucher.type);
+    setVoucherModalPartyId(voucher.partyId || '');
+    setVoucherModalIsGstBill(Boolean(voucher.isGstBill));
+    setShowNewVoucherModal(true);
+  };
+
   const handleOpenNewSale = (partyId?: string, isGst: boolean = true) => {
+    setEditingVoucher(null);
     setVoucherModalType('SALE');
     setVoucherModalPartyId(partyId || '');
     setVoucherModalIsGstBill(isGst);
@@ -73,6 +85,7 @@ function MainApp() {
   };
 
   const handleOpenNewPurchase = (partyId?: string) => {
+    setEditingVoucher(null);
     setVoucherModalType('PURCHASE');
     setVoucherModalPartyId(partyId || '');
     setVoucherModalIsGstBill(true);
@@ -80,6 +93,7 @@ function MainApp() {
   };
 
   const handleOpenNewPayment = (type: 'PAYMENT' | 'RECEIPT' = 'RECEIPT', partyId?: string) => {
+    setEditingVoucher(null);
     setVoucherModalType(type);
     setVoucherModalPartyId(partyId || '');
     setShowNewVoucherModal(true);
@@ -119,9 +133,9 @@ function MainApp() {
             setIsMobileMenuOpen={setIsMobileMenuOpen}
           />
 
-          <main className="print-main-reset flex-1 p-3.5 sm:p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+          <main className="print-main-reset flex-1 p-3.5 sm:p-5 lg:p-6 max-w-7xl mx-auto w-full overflow-y-auto">
             {lastError && (
-              <div className="no-print mb-5 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs">
+              <div className="no-print mb-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
                   <span className="truncate font-medium">{lastError}</span>
@@ -142,18 +156,21 @@ function MainApp() {
                 onNavigate={setActiveModule}
                 onSelectCustomer={handleNavigateCustomer}
                 onOpenNewVoucher={(type) => {
+                  setEditingVoucher(null);
                   setVoucherModalType(type);
                   setVoucherModalPartyId('');
                   setVoucherModalIsGstBill(true);
                   setShowNewVoucherModal(true);
                 }}
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
               />
             )}
 
             {activeModule === 'create_invoice' && (
               <CreateInvoiceView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onNavigateToInvoices={() => setActiveModule('all_invoices')}
                 onNavigateToBuilder={() => setActiveModule('invoice_builder')}
               />
@@ -162,6 +179,7 @@ function MainApp() {
             {activeModule === 'daybook' && (
               <DayBookView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewVoucher={() => handleOpenNewSale()}
               />
             )}
@@ -171,6 +189,7 @@ function MainApp() {
             {activeModule === 'all_invoices' && (
               <InvoicesRegisterView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewSale={() => setActiveModule('create_invoice')}
                 onOpenNewPurchase={() => handleOpenNewPurchase()}
               />
@@ -179,6 +198,7 @@ function MainApp() {
             {activeModule === 'purchases' && (
               <PurchasesView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewPurchase={handleOpenNewPurchase}
                 onNavigateToCompany={handleNavigateCompany}
               />
@@ -187,6 +207,7 @@ function MainApp() {
             {activeModule === 'sales' && (
               <SalesView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewSale={handleOpenNewSale}
                 onNavigateToCustomer={handleNavigateCustomer}
               />
@@ -200,12 +221,20 @@ function MainApp() {
               <InventoryView onNavigateToAddProduct={() => setActiveModule('add_product')} />
             )}
 
+            {activeModule === 'stock_report' && (
+              <StockReportView
+                onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
+              />
+            )}
+
             {activeModule === 'profit_loss' && <ProfitLossView />}
 
             {activeModule === 'payments' && (
               <PaymentsReceiptsView
                 onOpenNewVoucher={handleOpenNewPayment}
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
               />
             )}
 
@@ -214,6 +243,7 @@ function MainApp() {
                 initialCustomerId={focusedCustomerId}
                 onClearInitialCustomer={() => setFocusedCustomerId('')}
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewSale={handleOpenNewSale}
                 onOpenNewReceipt={(partyId) => handleOpenNewPayment('RECEIPT', partyId)}
               />
@@ -224,6 +254,7 @@ function MainApp() {
                 initialCompanyId={focusedCompanyId}
                 onClearInitialCompany={() => setFocusedCompanyId('')}
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewPurchase={handleOpenNewPurchase}
                 onOpenNewPayment={(partyId) => handleOpenNewPayment('PAYMENT', partyId)}
               />
@@ -245,7 +276,9 @@ function MainApp() {
             {activeModule === 'credit_debit' && (
               <CreditDebitNotesView
                 onSelectVoucherForPrint={handleOpenPrint}
+                onEditVoucher={handleOpenEditVoucher}
                 onOpenNewVoucher={(noteType) => {
+                  setEditingVoucher(null);
                   setVoucherModalType(noteType);
                   setVoucherModalPartyId('');
                   setVoucherModalIsGstBill(true);
@@ -264,7 +297,11 @@ function MainApp() {
           initialType={voucherModalType}
           initialPartyId={voucherModalPartyId}
           initialIsGstBill={voucherModalIsGstBill}
-          onClose={() => setShowNewVoucherModal(false)}
+          editingVoucher={editingVoucher || undefined}
+          onClose={() => {
+            setShowNewVoucherModal(false);
+            setEditingVoucher(null);
+          }}
           onSuccess={(voucher, shouldPrint) => {
             if (shouldPrint) {
               setPrintingVoucher(voucher);
@@ -276,6 +313,7 @@ function MainApp() {
       {printingVoucher && (
         <InvoicePrintModal
           voucher={printingVoucher}
+          onEditVoucher={handleOpenEditVoucher}
           onClose={() => setPrintingVoucher(null)}
         />
       )}

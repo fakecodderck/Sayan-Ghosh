@@ -136,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {searchResults.vouchers.length > 0 && (
               <div>
                 <p className="px-2 py-1 text-[10px] font-bold uppercase text-slate-400">
-                  Invoices &amp; Vouchers
+                  Invoices
                 </p>
                 {searchResults.vouchers.map(v => (
                   <button
@@ -270,7 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-1.5 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shrink-0"
+            className="lg:hidden w-9 h-9 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg inline-flex items-center justify-center transition-colors shrink-0"
             aria-label="Toggle navigation menu"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -306,7 +306,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
               onChange={e => setGlobalSearch(e.target.value)}
               placeholder="Search customers, companies, products, or invoice #..."
-              className="w-full pl-9 pr-8 py-1.5 sm:py-2 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-transparent theme-ring rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 transition-all outline-hidden"
+              className="w-full h-9 pl-9 pr-8 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 border border-transparent theme-ring rounded-lg text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 transition-all outline-hidden"
             />
             {globalSearch && (
               <button
@@ -322,11 +322,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Zone 3: Actions + Theme */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowMobileSearch(prev => !prev)}
-            className="md:hidden p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[34px] min-h-[34px] flex items-center justify-center"
+            className="md:hidden w-9 h-9 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center justify-center shrink-0"
             aria-label="Toggle search"
           >
             <Search className="w-4 h-4" />
@@ -336,7 +336,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => setShowColorPicker(!showColorPicker)}
-              className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center gap-1"
+              className="h-9 px-2.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center justify-center gap-1.5 shrink-0"
               title="Customise UI Color Theme"
             >
               <Palette className="w-4 h-4" />
@@ -347,7 +347,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             {showColorPicker && (
-              <div className="absolute right-0 top-12 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 z-50 space-y-2">
+              <div className="absolute right-0 top-11 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 z-50 space-y-2">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
                   <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
                     Select UI Color Theme
@@ -394,7 +394,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={() => setDarkMode(!darkMode)}
-            className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[34px] sm:min-w-[38px] min-h-[34px] sm:min-h-[38px] flex items-center justify-center"
+            className="w-9 h-9 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center justify-center shrink-0"
             title="Toggle Dark / Light Theme"
           >
             {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-600" />}
@@ -403,10 +403,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenNewVoucher}
-            className="theme-bg theme-bg-hover flex items-center justify-center gap-1.5 p-2 sm:px-3.5 sm:py-2 text-white text-xs font-bold rounded-xl shadow-xs transition-all whitespace-nowrap min-w-[34px] sm:min-w-[auto] min-h-[34px] sm:min-h-[38px] active:scale-95 shrink-0"
-            title="Quick New Invoice / Voucher"
+            className="theme-bg theme-bg-hover inline-flex items-center justify-center gap-1.5 w-9 sm:w-auto h-9 px-0 sm:px-3.5 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap active:scale-95 shrink-0"
+            title="Quick New Invoice"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">New Invoice</span>
           </button>
         </div>

@@ -134,9 +134,7 @@ export const GstinLookupField: React.FC<GstinLookupFieldProps> = ({
           placeholder={placeholder}
           value={value}
           onChange={e => onChange(normalizeGstin(e.target.value))}
-          className={`flex-1 min-w-0 font-mono uppercase border rounded-lg bg-white dark:bg-slate-800 theme-ring transition-colors ${
-            compact ? 'p-2 text-xs' : 'p-2 text-xs'
-          } ${
+          className={`flex-1 min-w-0 h-9 px-2.5 font-mono uppercase text-xs border rounded-lg bg-white dark:bg-slate-800 theme-ring transition-colors ${
             value.length === 15 && !validation.isValid
               ? 'border-rose-400 dark:border-rose-600'
               : validation.isValid
@@ -150,7 +148,7 @@ export const GstinLookupField: React.FC<GstinLookupFieldProps> = ({
           onClick={handleVerifyFetch}
           disabled={!validation.isValid || isLookingUp}
           title="Verify GSTIN checksum and fetch taxpayer details"
-          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg text-[11px] font-semibold theme-soft-badge hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity whitespace-nowrap shrink-0"
+          className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg text-xs font-semibold theme-soft-badge hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity whitespace-nowrap shrink-0"
         >
           {isLookingUp ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

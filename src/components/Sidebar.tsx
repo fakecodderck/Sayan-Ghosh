@@ -18,6 +18,7 @@ import {
   FilePlus2,
   PackagePlus,
   LayoutTemplate,
+  ClipboardList,
   X
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
@@ -32,6 +33,7 @@ export type ActiveModule =
   | 'sales'
   | 'add_product'
   | 'inventory'
+  | 'stock_report'
   | 'profit_loss'
   | 'payments'
   | 'customers'
@@ -61,9 +63,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>(() => ({
     'BILLING & DAILY OPS': ['dashboard', 'create_invoice', 'daybook', 'all_invoices'].includes(activeModule),
-    'PRODUCTS & STOCK': ['add_product', 'inventory'].includes(activeModule),
+    'PRODUCTS & STOCK': ['add_product', 'inventory', 'stock_report'].includes(activeModule),
     'CUSTOMERS & COMPANIES': ['customers', 'companies', 'ledgers'].includes(activeModule),
-    'VOUCHER REGISTERS': ['sales', 'purchases', 'payments', 'credit_debit'].includes(activeModule),
+    'INVOICE REGISTERS': ['sales', 'purchases', 'payments', 'credit_debit'].includes(activeModule),
     'PRINT, FORMATS & REPORTS': ['invoice_builder', 'gst_bill', 'gstr_reports', 'profit_loss', 'settings'].includes(activeModule),
   }));
 
@@ -97,6 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Boxes,
           badge: lowStockCount > 0 ? lowStockCount : undefined,
         },
+        { id: 'stock_report', label: 'Stock Report', icon: ClipboardList },
       ],
     },
     {
@@ -108,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      sectionTitle: 'VOUCHER REGISTERS',
+      sectionTitle: 'INVOICE REGISTERS',
       items: [
         { id: 'sales', label: 'Sales Register', icon: TrendingUp },
         { id: 'purchases', label: 'Purchase Register', icon: ShoppingCart },
@@ -250,9 +253,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center"
+                className="w-8 h-8 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg inline-flex items-center justify-center shrink-0 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">{renderNavContent(true)}</div>

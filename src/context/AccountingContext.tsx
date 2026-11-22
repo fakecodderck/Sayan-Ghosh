@@ -53,6 +53,7 @@ interface AccountingContextType {
 
   // Actions
   addVoucher: (voucher: Omit<TransactionVoucher, 'id'>) => Promise<string>;
+  updateVoucher: (voucher: TransactionVoucher) => Promise<TransactionVoucher>;
   deleteVoucher: (id: string) => Promise<void>;
   addLedger: (ledger: Omit<LedgerAccount, 'id'>) => Promise<string>;
   updateLedger: (ledger: LedgerAccount) => Promise<void>;
@@ -430,12 +431,130 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS, 'true');
       setLastError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to sync voucher to Firebase.';
+      const message = err instanceof Error ? err.message : 'Failed to sync invoice to Firebase.';
       setLastError(message);
       throw err;
     }
 
     return newId;
+  };
+
+  /**
+   * Atomic Double-Entry Voucher Update (Reverses previous ledger/stock impact and applies updated entries in one batch)
+   */
+  const updateVoucher = async (updatedVoucher: TransactionVoucher): Promise<TransactionVoucher> => {
+    const currentVouchers = latestVouchersRef.current;
+    const currentLedgers = latestLedgersRef.current;
+    const currentInventory = latestInventoryRef.current;
+    const oldVoucher = currentVouchers.find(v => v.id === updatedVoucher.id);
+
+    if (!oldVoucher) {
+      throw new Error('Could not find the original invoice to update.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const companyId = oldVoucher.companyId || latestSettingsRef.current.id || 'company_ghosh_01';
+
+    // 1. Recompute journal entries for updated voucher
+    const oldJournals = oldVoucher.journalEntries || generateJournalEntries(oldVoucher, currentLedgers);
+    const newJournals = generateJournalEntries(updatedVoucher, currentLedgers);
+
+    const fullUpdatedVoucher: TransactionVoucher = {
+      ...updatedVoucher,
+      id: oldVoucher.id,
+      companyId,
+      journalEntries: newJournals,
+      createdAt: oldVoucher.createdAt || nowIso,
+      updatedAt: nowIso,
+    };
+
+    // 2. Compute net ledger deltas (reverse old + apply new)
+    const reverseLedgerDeltas = computeLedgerDeltas(oldJournals, true);
+    const newLedgerDeltas = computeLedgerDeltas(newJournals, false);
+    const netLedgerDeltas = new Map<string, number>();
+
+    reverseLedgerDeltas.forEach((delta, ledgerId) => {
+      netLedgerDeltas.set(ledgerId, (netLedgerDeltas.get(ledgerId) || 0) + delta);
+    });
+    newLedgerDeltas.forEach((delta, ledgerId) => {
+      netLedgerDeltas.set(ledgerId, (netLedgerDeltas.get(ledgerId) || 0) + delta);
+    });
+
+    const changedLedgerIds = new Set<string>();
+    const nextLedgers = currentLedgers.map(l => {
+      const netDelta = netLedgerDeltas.get(l.id);
+      if (netDelta === undefined || Math.abs(netDelta) < 0.0001) return l;
+      changedLedgerIds.add(l.id);
+      return {
+        ...l,
+        currentBalance: Number(((l.currentBalance || 0) + netDelta).toFixed(2)),
+        updatedAt: nowIso,
+      };
+    });
+
+    // 3. Compute net inventory deltas (reverse old + apply new)
+    const reverseItemDeltas = computeInventoryDeltas(oldVoucher, true);
+    const newItemDeltas = computeInventoryDeltas(fullUpdatedVoucher, false);
+    const netItemDeltas = new Map<string, number>();
+
+    reverseItemDeltas.forEach((delta, itemId) => {
+      netItemDeltas.set(itemId, (netItemDeltas.get(itemId) || 0) + delta);
+    });
+    newItemDeltas.forEach((delta, itemId) => {
+      netItemDeltas.set(itemId, (netItemDeltas.get(itemId) || 0) + delta);
+    });
+
+    const changedItemIds = new Set<string>();
+    const nextInventory = currentInventory.map(item => {
+      const netDelta = netItemDeltas.get(item.id);
+      if (netDelta === undefined || netDelta === 0) return item;
+      changedItemIds.add(item.id);
+      return {
+        ...item,
+        currentStock: Math.max(0, (item.currentStock || 0) + netDelta),
+        updatedAt: nowIso,
+      };
+    });
+
+    // 4. Build updated vouchers list sorted newest-first
+    const nextVouchers = currentVouchers
+      .map(v => (v.id === fullUpdatedVoucher.id ? fullUpdatedVoucher : v))
+      .sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+
+    // 5. Optimistically update refs and state
+    latestInventoryRef.current = nextInventory;
+    latestLedgersRef.current = nextLedgers;
+    latestVouchersRef.current = nextVouchers;
+    setInventory(nextInventory);
+    setLedgers(nextLedgers);
+    setVouchers(nextVouchers);
+
+    // 6. Commit atomically to Firestore
+    const affectedLedgers = nextLedgers.filter(l => changedLedgerIds.has(l.id));
+    const affectedItems = nextInventory.filter(i => changedItemIds.has(i.id));
+
+    try {
+      await commitVoucherAtomicBatch(fullUpdatedVoucher, affectedItems, affectedLedgers);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SYNCED_VOUCHERS, 'true');
+      setLastError(null);
+      return fullUpdatedVoucher;
+    } catch (err) {
+      // Roll back optimistic state if Firestore write failed
+      latestInventoryRef.current = currentInventory;
+      latestLedgersRef.current = currentLedgers;
+      latestVouchersRef.current = currentVouchers;
+      setInventory(currentInventory);
+      setLedgers(currentLedgers);
+      setVouchers(currentVouchers);
+
+      const message = err instanceof Error ? err.message : 'Failed to update invoice in Firebase.';
+      setLastError(message);
+      throw err;
+    }
   };
 
   /**
@@ -490,7 +609,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       await revertVoucherAtomicBatch(id, affectedItems, affectedLedgers);
       setLastError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to delete voucher in Firebase.';
+      const message = err instanceof Error ? err.message : 'Failed to delete invoice in Firebase.';
       setLastError(message);
       throw err;
     }
@@ -704,6 +823,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         lastError,
         clearError,
         addVoucher,
+        updateVoucher,
         deleteVoucher,
         addLedger,
         updateLedger,

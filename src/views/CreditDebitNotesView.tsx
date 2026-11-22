@@ -6,7 +6,8 @@ import {
   Download,
   HelpCircle,
   Trash2,
-  X
+  X,
+  Edit2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
@@ -15,11 +16,13 @@ import { downloadInvoicePdf } from '../utils/invoicePdf';
 
 interface CreditDebitNotesViewProps {
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
   onOpenNewVoucher: (type: 'CREDIT_NOTE' | 'DEBIT_NOTE') => void;
 }
 
 export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
   onSelectVoucherForPrint,
+  onEditVoucher,
   onOpenNewVoucher,
 }) => {
   const { vouchers, settings, getLedgerById, deleteVoucher } = useAccounting();
@@ -48,9 +51,9 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
   const totalGrand = notesList.reduce((acc, v) => acc + v.grandTotal, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             {activeTab === 'CREDIT_NOTE' ? 'Credit Notes (Sales Returns)' : 'Debit Notes (Purchase Returns)'}
@@ -60,13 +63,13 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Credit vs Debit Note Toggle */}
-          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+          <div className="h-9 inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
             <button
               type="button"
               onClick={() => setActiveTab('CREDIT_NOTE')}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`h-7 px-3 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 activeTab === 'CREDIT_NOTE'
                   ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -77,7 +80,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('DEBIT_NOTE')}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`h-7 px-3 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 activeTab === 'DEBIT_NOTE'
                   ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -90,9 +93,9 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
           <button
             type="button"
             onClick={() => onOpenNewVoucher(activeTab)}
-            className="theme-bg theme-bg-hover flex items-center gap-1.5 px-4 py-2.5 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            className="h-9 theme-bg theme-bg-hover inline-flex items-center justify-center gap-1.5 px-3.5 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>Issue {activeTab === 'CREDIT_NOTE' ? 'Credit Note' : 'Debit Note'}</span>
           </button>
         </div>
@@ -145,27 +148,27 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
       </div>
 
       {/* Search Bar */}
-      <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+      <div className="p-3 sm:p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search note #, party name, or return reason..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 theme-ring focus:outline-hidden"
+            className="w-full h-9 pl-9 pr-8 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 theme-ring focus:outline-hidden"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+              className="w-6 h-6 rounded-md inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-        <span className="text-[11px] font-mono text-slate-400">
+        <span className="text-[11px] font-mono text-slate-500 whitespace-nowrap shrink-0">
           Showing {notesList.length} note{notesList.length === 1 ? '' : 's'}
         </span>
       </div>
@@ -190,7 +193,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {notesList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-10 text-center text-slate-400">
                     No {activeTab.replace('_', ' ').toLowerCase()}s match your filter.
                   </td>
                 </tr>
@@ -227,6 +230,16 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                     </td>
                     <td className="py-2.5 px-3 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
+                        {onEditVoucher && (
+                          <button
+                            type="button"
+                            onClick={() => onEditVoucher(n)}
+                            title="Edit Note"
+                            className="w-7 h-7 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() =>
@@ -238,7 +251,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                             })
                           }
                           title="Download PDF Note"
-                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          className="w-7 h-7 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-md inline-flex items-center justify-center transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
@@ -246,7 +259,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                           type="button"
                           onClick={() => onSelectVoucherForPrint(n)}
                           title="Print / View Note"
-                          className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          className="w-7 h-7 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md inline-flex items-center justify-center transition-colors"
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
@@ -258,14 +271,14 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                                 deleteVoucher(n.id);
                                 setConfirmDeleteId(null);
                               }}
-                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                              className="h-7 px-2 text-[10px] font-bold bg-rose-600 text-white rounded-md inline-flex items-center justify-center"
                             >
                               Delete
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                              className="h-7 px-2 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-md inline-flex items-center justify-center"
                             >
                               No
                             </button>
@@ -275,7 +288,7 @@ export const CreditDebitNotesView: React.FC<CreditDebitNotesViewProps> = ({
                             type="button"
                             onClick={() => setConfirmDeleteId(n.id)}
                             title="Delete Note"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
+                            className="w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-md transition-colors inline-flex items-center justify-center"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

@@ -53,7 +53,7 @@ export const SettingsView: React.FC = () => {
   const brandInitial = (form.name || 'G').trim().charAt(0).toUpperCase();
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5 w-full">
       <div>
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           Business Profile, Theme &amp; GST Configuration
@@ -77,9 +77,9 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-6 text-xs">
+      <form onSubmit={handleSave} className="space-y-5 text-xs">
         {/* UI Color Theme Customization */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <Palette className="w-4 h-4 theme-text" />
             <div>
@@ -156,7 +156,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Business Legal Identity */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <Building className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
@@ -249,7 +249,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Banking and Digital UPI Details */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <CreditCard className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
@@ -323,7 +323,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Invoice Terms & Signatory */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             <FileText className="w-4 h-4 theme-text" />
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
@@ -357,32 +357,32 @@ export const SettingsView: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           {!showResetConfirm ? (
             <button
               type="button"
               onClick={() => setShowResetConfirm(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-medium border border-rose-200 dark:border-rose-900 transition-colors"
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-semibold border border-rose-200 dark:border-rose-900 transition-colors whitespace-nowrap shrink-0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Clear Local Data</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
-              <span className="text-rose-700 dark:text-rose-300 font-medium">
+            <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+              <span className="text-rose-700 dark:text-rose-300 font-medium px-1">
                 Reset local cache?
               </span>
               <button
                 type="button"
                 onClick={handleConfirmReset}
-                className="px-2.5 py-1 bg-rose-600 text-white rounded font-bold"
+                className="h-7 px-2.5 bg-rose-600 text-white rounded-md font-bold text-[11px] whitespace-nowrap"
               >
                 Confirm Reset
               </button>
               <button
                 type="button"
                 onClick={() => setShowResetConfirm(false)}
-                className="px-2 py-1 text-slate-600 dark:text-slate-300"
+                className="h-7 px-2 text-slate-600 dark:text-slate-300 font-medium text-[11px] whitespace-nowrap"
               >
                 Cancel
               </button>
@@ -391,9 +391,9 @@ export const SettingsView: React.FC = () => {
 
           <button
             type="submit"
-            className="flex items-center gap-2 px-5 py-2.5 theme-bg theme-bg-hover text-white font-semibold rounded-lg shadow-xs transition-colors text-xs"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-4 theme-bg theme-bg-hover text-white font-bold rounded-lg shadow-xs transition-colors text-xs whitespace-nowrap shrink-0"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-3.5 h-3.5" />
             <span>Save Configuration Changes</span>
           </button>
         </div>

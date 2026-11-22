@@ -233,11 +233,11 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => loadPreset('blank')}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5"
+            className="h-9 px-3.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <FilePlus2 className="w-3.5 h-3.5" />
             <span>Start Blank</span>
@@ -250,7 +250,7 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
                 loadPreset(e.target.value as keyof typeof STARTER_TEMPLATES);
               }
             }}
-            className="px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 theme-ring focus:outline-none"
+            className="h-9 px-3 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 theme-ring focus:outline-none shrink-0"
           >
             <option value="">Load Starter Preset...</option>
             <option value="classic_gst">Classic GST Tax Invoice (A4)</option>
@@ -265,7 +265,7 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
                 await handleSaveTemplate(true);
                 onPrintVoucher(activePreviewVoucher);
               }}
-              className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5"
+              className="h-9 px-3.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Save &amp; Test Print</span>
@@ -275,9 +275,9 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
           <button
             type="button"
             onClick={() => handleSaveTemplate(true)}
-            className="px-4 py-2 text-xs font-bold rounded-lg theme-bg theme-bg-hover text-white shadow-xs flex items-center gap-1.5 transition-all"
+            className="h-9 px-3.5 text-xs font-bold rounded-lg theme-bg theme-bg-hover text-white shadow-xs inline-flex items-center justify-center gap-1.5 transition-all whitespace-nowrap shrink-0"
           >
-            {savedNotice ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {savedNotice ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
             <span>{savedNotice ? 'Format Saved & Active' : 'Save & Set Default'}</span>
           </button>
         </div>
@@ -341,7 +341,7 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
               <select
                 value={activePreviewVoucher.id}
                 onChange={e => setPreviewVoucherId(e.target.value)}
-                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium max-w-[210px]"
+                className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium max-w-[210px]"
               >
                 {invoiceVouchers.length === 0 ? (
                   <option value={SAMPLE_PREVIEW_VOUCHER.id}>Sample Invoice Preview</option>
@@ -364,7 +364,7 @@ export const InvoiceBuilderView: React.FC<InvoiceBuilderViewProps> = ({ onPrintV
             <div
               className={`w-full ${
                 template.paperSize === 'A5' ? 'max-w-[540px]' : 'max-w-[700px]'
-              } bg-white text-slate-900 p-4 sm:p-6 shadow-md border border-slate-300 min-h-[520px] flex flex-col`}
+              } bg-white text-slate-900 p-4 sm:p-6 shadow-md border border-slate-300 min-h-[460px] flex flex-col`}
               onDragOver={e => {
                 e.preventDefault();
                 if (template.blocks.length === 0) setDropTargetIndex(0);

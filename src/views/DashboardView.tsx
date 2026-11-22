@@ -17,7 +17,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Printer,
-  Download
+  Download,
+  Edit2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { ActiveModule } from '../components/Sidebar';
@@ -30,6 +31,7 @@ interface DashboardViewProps {
   onSelectCustomer?: (customerId: string) => void;
   onOpenNewVoucher: (type: VoucherType) => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -37,6 +39,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectCustomer,
   onOpenNewVoucher,
   onSelectVoucherForPrint,
+  onEditVoucher,
 }) => {
   const { vouchers, ledgers, inventory, settings, getLedgerById } = useAccounting();
   const [chartTimeframe, setChartTimeframe] = useState<'6M' | '3M' | '1Y'>('6M');
@@ -286,82 +289,86 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-5 animate-in fade-in duration-300">
       {/* 1. Header Greeting & Action Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
             {greetingTime}, {userName}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Business snapshot for {settings.name || 'Ghosh Agency'}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Financial Year & Date Display */}
-          <div className="flex items-center gap-2.5 px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-            <div className="p-1.5 theme-soft-badge rounded-lg">
-              <Calendar className="w-4 h-4" />
+          <div className="h-10 inline-flex items-center gap-2.5 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs shrink-0">
+            <div className="w-6 h-6 inline-flex items-center justify-center theme-soft-badge rounded-md shrink-0">
+              <Calendar className="w-3.5 h-3.5" />
             </div>
             <div className="text-left leading-tight">
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{dateFormatted}</p>
-              <p className="text-[10px] text-slate-400">{financialYearStr}</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{dateFormatted}</p>
+              <p className="text-[10px] text-slate-400 whitespace-nowrap">{financialYearStr}</p>
             </div>
           </div>
 
-          {/* Quick Create Voucher Dropdown Button */}
+          {/* Quick Create Invoice Dropdown Button */}
           <div className="relative" ref={voucherMenuRef}>
             <button
               type="button"
               onClick={() => setShowVoucherMenu(!showVoucherMenu)}
-              className="theme-bg theme-bg-hover flex items-center gap-2 px-4 py-2.5 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all min-h-[40px]"
+              className="theme-bg theme-bg-hover h-10 inline-flex items-center justify-center gap-2 px-4 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4" />
-              <span>Create Voucher</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showVoucherMenu ? 'rotate-180' : ''}`} />
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Create Invoice</span>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${showVoucherMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {showVoucherMenu && (
               <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-30 p-1.5 text-xs">
                 <button
+                  type="button"
                   onClick={() => {
                     onOpenNewVoucher('SALE');
                     setShowVoucherMenu(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium text-left"
                 >
-                  <ArrowUpRight className="w-4 h-4" />
+                  <ArrowUpRight className="w-4 h-4 shrink-0" />
                   <span>Sales Invoice (GST / Bill)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     onOpenNewVoucher('PURCHASE');
                     setShowVoucherMenu(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium text-left"
                 >
-                  <ArrowDownRight className="w-4 h-4" />
+                  <ArrowDownRight className="w-4 h-4 shrink-0" />
                   <span>Purchase Bill (Inward)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     onOpenNewVoucher('RECEIPT');
                     setShowVoucherMenu(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-medium text-left"
                 >
-                  <IndianRupee className="w-4 h-4" />
+                  <IndianRupee className="w-4 h-4 shrink-0" />
                   <span>Money Receipt (From Customer)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     onOpenNewVoucher('PAYMENT');
                     setShowVoucherMenu(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium text-left"
                 >
-                  <CreditCard className="w-4 h-4" />
+                  <CreditCard className="w-4 h-4 shrink-0" />
                   <span>Payment Disbursal (To Supplier)</span>
                 </button>
               </div>
@@ -474,11 +481,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 3. Middle Section: Sales & Purchase Bar Chart (2/3 width) + Business Highlights (1/3 width) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: Bar Chart */}
-        <div className="lg:col-span-8 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-8 p-4 sm:p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
           {/* Chart Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-lg">
                 <TrendingUp className="w-4 h-4" />
@@ -488,7 +495,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </h3>
             </div>
 
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-3 text-xs">
               {/* Legend */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
@@ -505,7 +512,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <select
                 value={chartTimeframe}
                 onChange={e => setChartTimeframe(e.target.value as any)}
-                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300"
+                className="h-8 px-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300"
               >
                 <option value="6M">Last 6 Months</option>
                 <option value="3M">Last 3 Months</option>
@@ -515,7 +522,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* SVG Bar Chart */}
-          <div className="relative w-full h-64 sm:h-72">
+          <div className="relative w-full h-56 sm:h-64">
             {/* Tooltip Popup */}
             {hoveredBarIndex !== null && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 bg-slate-900 text-white text-xs font-mono rounded-lg shadow-lg pointer-events-none">
@@ -549,7 +556,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 return (
                   <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
                     {/* Bars pair */}
-                    <div className="flex items-end justify-center gap-1 sm:gap-2 w-full h-full pb-1">
+                    <div className="flex items-end justify-center gap-1 sm:gap-2 w-full h-full">
                       {/* Sales Bar */}
                       <div
                         onMouseEnter={() => setHoveredBarIndex({ monthIdx: idx, type: 'sales' })}
@@ -568,7 +575,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     {/* Month Label */}
-                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-2">
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1.5">
                       {d.label}
                     </span>
                   </div>
@@ -579,8 +586,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Right: Business Highlights */}
-        <div className="lg:col-span-4 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-4 p-4 sm:p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
               Business Highlights
             </h3>
@@ -664,7 +671,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Vouchers</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 block">Invoices</span>
                   <span className="text-[10px] text-slate-400">Day Book Entries</span>
                 </div>
               </div>
@@ -723,17 +730,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Bottom Section: Recent Vouchers (6 cols) + Top Customers (6 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Recent Vouchers */}
-        <div className="lg:col-span-6 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-4">
+      {/* 4. Bottom Section: Recent Invoices (6 cols) + Top Customers (6 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Left: Recent Invoices */}
+        <div className="lg:col-span-6 p-4 sm:p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-3.5">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-lg">
                 <FileText className="w-4 h-4" />
               </div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-                Recent Vouchers
+                Recent Invoices
               </h3>
             </div>
             <button
@@ -751,7 +758,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   <th className="pb-2.5 font-medium pr-1 sm:pr-2">Date</th>
                   <th className="pb-2.5 font-medium px-1 sm:px-2">Type</th>
-                  <th className="pb-2.5 font-medium px-1 sm:px-2 hidden sm:table-cell">Voucher No</th>
+                  <th className="pb-2.5 font-medium px-1 sm:px-2 hidden sm:table-cell">Invoice No</th>
                   <th className="pb-2.5 font-medium px-1 sm:px-2">Party</th>
                   <th className="pb-2.5 font-medium text-right px-1 sm:px-2">Amount</th>
                   <th className="pb-2.5 font-medium text-right pl-1">Doc</th>
@@ -761,7 +768,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {recentVouchers.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-slate-400">
-                      No transaction vouchers recorded yet.
+                      No invoices recorded yet.
                     </td>
                   </tr>
                 ) : (
@@ -790,6 +797,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
                       <td className="py-2.5 sm:py-3 text-right pl-1 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-0.5">
+                          {onEditVoucher && (
+                            <button
+                              type="button"
+                              title="Edit Invoice"
+                              onClick={() => onEditVoucher(v)}
+                              className="w-7 h-7 inline-flex items-center justify-center text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             title="Download PDF"
@@ -801,7 +818,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
                               })
                             }
-                            className="p-1.5 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-md"
+                            className="w-7 h-7 inline-flex items-center justify-center text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-md transition-colors"
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -809,7 +826,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             type="button"
                             title="Print / Preview"
                             onClick={() => onSelectVoucherForPrint(v)}
-                            className="p-1.5 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md"
+                            className="w-7 h-7 inline-flex items-center justify-center text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
@@ -824,7 +841,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Right: Top Customers */}
-        <div className="lg:col-span-6 p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="lg:col-span-6 p-4 sm:p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="p-1.5 theme-soft-badge rounded-lg">

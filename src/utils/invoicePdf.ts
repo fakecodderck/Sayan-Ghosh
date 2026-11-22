@@ -52,10 +52,10 @@ function getDocTitle(voucher: TransactionVoucher, overrideTitle?: string): strin
   if (overrideTitle) return overrideTitle;
   if (voucher.type === 'CREDIT_NOTE') return 'CREDIT NOTE (SALES RETURN)';
   if (voucher.type === 'DEBIT_NOTE') return 'DEBIT NOTE (PURCHASE RETURN)';
-  if (voucher.type === 'PURCHASE') return 'PURCHASE INWARD VOUCHER';
-  if (voucher.type === 'PAYMENT') return 'PAYMENT DISBURSAL VOUCHER';
-  if (voucher.type === 'RECEIPT') return 'MONEY RECEIPT VOUCHER';
-  if (voucher.type === 'CONTRA') return 'CONTRA VOUCHER';
+  if (voucher.type === 'PURCHASE') return 'PURCHASE INVOICE';
+  if (voucher.type === 'PAYMENT') return 'PAYMENT INVOICE';
+  if (voucher.type === 'RECEIPT') return 'RECEIPT INVOICE';
+  if (voucher.type === 'CONTRA') return 'CONTRA INVOICE';
   return voucher.isGstBill ? 'TAX INVOICE' : 'BILL OF SUPPLY';
 }
 

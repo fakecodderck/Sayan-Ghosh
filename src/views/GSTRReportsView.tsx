@@ -65,9 +65,9 @@ export const GSTRReportsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             GST Statutory Returns &amp; Tax Audit
@@ -77,12 +77,12 @@ export const GSTRReportsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="h-9 inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
             <button
               type="button"
               onClick={() => setActiveTab('GSTR1')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`h-7 px-3 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 activeTab === 'GSTR1'
                   ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -93,7 +93,7 @@ export const GSTRReportsView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('GSTR3B')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`h-7 px-3 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 activeTab === 'GSTR3B'
                   ? 'bg-white dark:bg-slate-700 theme-text shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -106,7 +106,7 @@ export const GSTRReportsView: React.FC = () => {
           <button
             type="button"
             onClick={downloadCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors whitespace-nowrap"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -115,7 +115,7 @@ export const GSTRReportsView: React.FC = () => {
       </div>
 
       {activeTab === 'GSTR1' ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -262,7 +262,7 @@ export const GSTRReportsView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono tabular-nums">
                   {gstr1.hsnSummary.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-slate-400 font-sans">
+                      <td colSpan={10} className="py-10 text-center text-slate-400 font-sans">
                         No sales transactions recorded yet to compile HSN report.
                       </td>
                     </tr>
@@ -309,8 +309,8 @@ export const GSTRReportsView: React.FC = () => {
         </div>
       ) : (
         /* GSTR-3B View */
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-6">
+        <div className="space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200 dark:border-slate-800">
               GSTR-3B Monthly Tax Computation &amp; Input Tax Credit (ITC)
             </h3>

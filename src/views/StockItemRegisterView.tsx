@@ -194,18 +194,19 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Top Breadcrumb & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={onBack}
-            className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shadow-xs"
+            className="w-9 h-9 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 inline-flex items-center justify-center transition-colors shadow-xs shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                 {item.name}
               </h2>
@@ -221,11 +222,11 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowAdjustModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors min-h-[38px]"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Stock Adjustment</span>
@@ -244,24 +245,24 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
               setEditMinAlert(item.minStockAlert);
               setShowEditModal(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 theme-soft-badge hover:opacity-90 text-xs font-semibold rounded-lg transition-colors min-h-[38px]"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3 theme-soft-badge hover:opacity-90 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0"
           >
             <Edit2 className="w-3.5 h-3.5" />
             <span>Edit Product</span>
           </button>
           {confirmDelete ? (
-            <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-2 py-1">
+            <div className="h-9 inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-1.5 shrink-0">
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded"
+                className="h-7 px-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-md inline-flex items-center whitespace-nowrap"
               >
                 Confirm Delete
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmDelete(false)}
-                className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                className="h-7 px-2 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900 inline-flex items-center whitespace-nowrap"
               >
                 Cancel
               </button>
@@ -270,7 +271,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-xs font-semibold rounded-lg transition-colors border border-rose-200 dark:border-rose-900 min-h-[38px]"
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-xs font-semibold rounded-lg transition-colors border border-rose-200 dark:border-rose-900 whitespace-nowrap shrink-0"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>
@@ -370,22 +371,22 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search voucher or party..."
+                placeholder="Search invoice or party..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                className="h-9 pl-8 pr-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
               />
             </div>
 
             <select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
-              className="px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
+              className="h-9 px-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
             >
               <option value="ALL">All Movements</option>
               <option value="PURCHASE">Purchases (In)</option>
@@ -402,7 +403,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase font-semibold text-[10px] border-b border-slate-200 dark:border-slate-800">
                   <th className="py-2.5 px-4 w-24">Date</th>
-                  <th className="py-2.5 px-3 w-32">Voucher / Bill No</th>
+                  <th className="py-2.5 px-3 w-32">Invoice / Bill No</th>
                   <th className="py-2.5 px-3 w-28">Nature</th>
                   <th className="py-2.5 px-3 min-w-[160px]">Party Name / Narration</th>
                   <th className="py-2.5 px-3 w-24 text-right">Rate (₹)</th>
@@ -420,7 +421,7 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {filteredMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={8} className="py-10 text-center text-slate-400">
                       No stock movement entries recorded for this product yet.
                     </td>
                   </tr>
@@ -538,14 +539,14 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAdjustModal(false)}
-                className="px-3.5 py-2 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                className="h-9 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors inline-flex items-center justify-center whitespace-nowrap"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApplyAdjustment}
-                className="px-4 py-2 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
+                className="h-9 px-4 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs inline-flex items-center justify-center whitespace-nowrap"
               >
                 Apply Stock Adjustment
               </button>
@@ -703,13 +704,13 @@ export const StockItemRegisterView: React.FC<StockItemRegisterViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  className="h-9 px-4 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors font-semibold inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg"
+                  className="h-9 px-4 font-semibold text-white theme-bg theme-bg-hover rounded-lg inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Save Changes
                 </button>

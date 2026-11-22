@@ -25,6 +25,7 @@ interface CustomersViewProps {
   initialCustomerId?: string;
   onClearInitialCustomer?: () => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
   onOpenNewSale: (partyId: string, isGst?: boolean) => void;
   onOpenNewReceipt: (partyId: string) => void;
 }
@@ -33,6 +34,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   initialCustomerId,
   onClearInitialCustomer,
   onSelectVoucherForPrint,
+  onEditVoucher,
   onOpenNewSale,
   onOpenNewReceipt,
 }) => {
@@ -246,14 +248,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   // If a customer is selected, render their dedicated customer page
   if (activeCustomer) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Back and Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={handleBackToDirectory}
-              className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors shadow-xs"
+              className="w-9 h-9 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 inline-flex items-center justify-center shrink-0 transition-colors shadow-xs"
               title="Back to Customer Directory"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -272,7 +274,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenNewSale(activeCustomer.id, false)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Non-GST Sale</span>
@@ -280,7 +282,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenNewSale(activeCustomer.id, true)}
-              className="flex items-center gap-1.5 px-3 py-2 theme-bg theme-bg-hover text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3 theme-bg theme-bg-hover text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>GST Invoice</span>
@@ -288,7 +290,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenNewReceipt(activeCustomer.id)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all min-h-[38px] whitespace-nowrap"
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
             >
               <Receipt className="w-3.5 h-3.5" />
               <span>Record Payment</span>
@@ -296,24 +298,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <button
               type="button"
               onClick={() => openEdit(activeCustomer)}
-              className="p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
+              className="w-9 h-9 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 inline-flex items-center justify-center shrink-0 transition-colors"
               title="Edit Profile"
             >
               <Edit2 className="w-4 h-4" />
             </button>
             {confirmDeleteId === activeCustomer.id ? (
-              <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-2 py-1">
+              <div className="h-9 inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg px-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => confirmDeleteCustomer(activeCustomer.id)}
-                  className="px-2 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded"
+                  className="h-7 px-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-md inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Confirm Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmDeleteId(null)}
-                  className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  className="h-7 px-2 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 rounded-md inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Cancel
                 </button>
@@ -322,7 +324,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <button
                 type="button"
                 onClick={() => setConfirmDeleteId(activeCustomer.id)}
-                className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:bg-rose-950/40 rounded-lg border border-slate-200 dark:border-slate-700 min-w-[38px] min-h-[38px] flex items-center justify-center"
+                className="w-9 h-9 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:bg-rose-950/40 rounded-lg border border-slate-200 dark:border-slate-700 inline-flex items-center justify-center shrink-0 transition-colors"
                 title="Delete Customer"
               >
                 <Trash2 className="w-4 h-4" />
@@ -498,10 +500,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
+                            {onEditVoucher && (
+                              <button
+                                type="button"
+                                onClick={() => onEditVoucher(v)}
+                                className="w-7 h-7 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+                                title="Edit Invoice"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => downloadInvoicePdf({ voucher: v, settings, party: activeCustomer })}
-                              className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              className="w-7 h-7 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md inline-flex items-center justify-center transition-colors"
                               title="Download PDF"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -509,7 +521,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                             <button
                               type="button"
                               onClick={() => onSelectVoucherForPrint(v)}
-                              className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                              className="w-7 h-7 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md inline-flex items-center justify-center transition-colors"
                               title="Print Invoice"
                             >
                               <Printer className="w-3.5 h-3.5" />
@@ -603,9 +615,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -719,17 +731,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   />
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    className="h-9 px-3.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg inline-flex items-center justify-center whitespace-nowrap transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
+                    className="h-9 px-4 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs inline-flex items-center justify-center whitespace-nowrap"
                   >
                     Save Changes
                   </button>
@@ -744,9 +756,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
   // Customer List Directory
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 theme-text" />
@@ -763,9 +775,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             resetForm();
             setShowAddModal(true);
           }}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Add New Customer</span>
         </button>
       </div>
@@ -810,17 +822,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       </div>
 
       {/* Search Bar */}
-      <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+      <div className="p-3 sm:p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search customer name, phone, GSTIN, city..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden theme-ring"
+            className="w-full h-9 pl-9 pr-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden theme-ring"
           />
         </div>
+        <span className="text-[11px] font-mono text-slate-500 whitespace-nowrap shrink-0">
+          Showing {filteredCustomers.length} of {customers.length} Customers
+        </span>
       </div>
 
       {/* Customers Table */}
@@ -843,7 +858,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-10 text-center text-slate-400">
                     No customers found matching your search.
                   </td>
                 </tr>
@@ -887,11 +902,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => setActiveCustomerId(c.id)}
-                            className="px-2.5 py-1 text-[11px] theme-soft-badge rounded font-semibold hover:opacity-90"
+                            className="h-7 px-2.5 text-[11px] theme-soft-badge rounded-md font-semibold hover:opacity-90 inline-flex items-center justify-center whitespace-nowrap"
                           >
                             View Page
                           </button>
@@ -899,7 +914,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                             type="button"
                             onClick={() => onOpenNewSale(c.id)}
                             title="New Invoice"
-                            className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
+                            className="w-7 h-7 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-md inline-flex items-center justify-center transition-colors"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -908,14 +923,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => confirmDeleteCustomer(c.id)}
-                                className="px-2 py-0.5 text-[10px] font-bold bg-rose-600 text-white rounded"
+                                className="h-7 px-2 text-[10px] font-bold bg-rose-600 text-white rounded-md inline-flex items-center justify-center"
                               >
                                 Delete
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteId(null)}
-                                className="px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                                className="h-7 px-2 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-md inline-flex items-center justify-center"
                               >
                                 No
                               </button>
@@ -925,7 +940,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               type="button"
                               onClick={() => setConfirmDeleteId(c.id)}
                               title="Delete Customer"
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
+                              className="w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md inline-flex items-center justify-center transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -958,9 +973,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1095,13 +1110,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  className="h-9 px-3.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg inline-flex items-center justify-center whitespace-nowrap transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
+                  className="h-9 px-4 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Save Customer
                 </button>

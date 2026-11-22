@@ -5,7 +5,8 @@ import {
   Plus,
   Printer,
   Download,
-  Trash2
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher } from '../types/accounting';
@@ -15,11 +16,13 @@ import { downloadInvoicePdf } from '../utils/invoicePdf';
 interface PaymentsReceiptsViewProps {
   onOpenNewVoucher: (type?: 'PAYMENT' | 'RECEIPT', partyId?: string) => void;
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
 }
 
 export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
   onOpenNewVoucher,
   onSelectVoucherForPrint,
+  onEditVoucher,
 }) => {
   const { vouchers, ledgers, settings, getLedgerById, deleteVoucher } = useAccounting();
 
@@ -60,9 +63,9 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Receipt className="w-5 h-5 theme-text" />
@@ -73,22 +76,22 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => onOpenNewVoucher('RECEIPT')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
           >
-            <Plus className="w-4 h-4" />
-            <span>+ Customer Pays Me</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Customer Pays Me</span>
           </button>
           <button
             type="button"
             onClick={() => onOpenNewVoucher('PAYMENT')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
           >
-            <Plus className="w-4 h-4" />
-            <span>+ I Pay a Company</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>I Pay a Company</span>
           </button>
         </div>
       </div>
@@ -131,25 +134,25 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div className="relative flex-1 min-w-[260px] max-w-sm">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+      <div className="p-3 sm:p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search voucher #, party name, or UTR ref..."
+            placeholder="Search invoice #, party name, or UTR ref..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden"
+            className="w-full h-9 pl-9 pr-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden theme-ring"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Nature filter */}
-          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
+          <div className="h-9 inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
             <button
               type="button"
               onClick={() => setFilterType('ALL')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`h-7 px-3 rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 filterType === 'ALL'
                   ? 'bg-white dark:bg-slate-700 font-semibold theme-text shadow-xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -160,7 +163,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
             <button
               type="button"
               onClick={() => setFilterType('RECEIPT')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`h-7 px-3 rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 filterType === 'RECEIPT'
                   ? 'bg-white dark:bg-slate-700 font-semibold text-teal-600 dark:text-teal-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -171,7 +174,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
             <button
               type="button"
               onClick={() => setFilterType('PAYMENT')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`h-7 px-3 rounded-md transition-colors inline-flex items-center justify-center whitespace-nowrap ${
                 filterType === 'PAYMENT'
                   ? 'bg-white dark:bg-slate-700 font-semibold text-rose-600 dark:text-rose-400 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400'
@@ -185,7 +188,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
           <select
             value={filterMode}
             onChange={e => setFilterMode(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
+            className="h-9 px-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
           >
             <option value="ALL">All Payment Modes</option>
             <option value="UPI">UPI / QR Code</option>
@@ -202,7 +205,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase font-semibold text-[10px] border-b border-slate-200 dark:border-slate-800">
                 <th className="py-2.5 px-4 w-28">Date</th>
-                <th className="py-2.5 px-3 w-32">Voucher No</th>
+                <th className="py-2.5 px-3 w-32">Invoice No</th>
                 <th className="py-2.5 px-3 w-28">Nature</th>
                 <th className="py-2.5 px-3">Party Account / Particulars</th>
                 <th className="py-2.5 px-3 w-28">Mode</th>
@@ -216,8 +219,8 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {vouchersList.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    No payment or receipt vouchers found.
+                  <td colSpan={8} className="py-10 text-center text-slate-400">
+                    No payment or receipt invoices found.
                   </td>
                 </tr>
               ) : (
@@ -262,6 +265,16 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                     </td>
                     <td className="py-2.5 px-3 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
+                        {onEditVoucher && (
+                          <button
+                            type="button"
+                            onClick={() => onEditVoucher(v)}
+                            title="Edit Invoice"
+                            className="w-7 h-7 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() =>
@@ -273,7 +286,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                             })
                           }
                           title="Download PDF Slip"
-                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          className="w-7 h-7 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-md inline-flex items-center justify-center transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
@@ -281,7 +294,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                           type="button"
                           onClick={() => onSelectVoucherForPrint(v)}
                           title="Print Receipt Slip"
-                          className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded min-w-[30px] min-h-[30px] flex items-center justify-center"
+                          className="w-7 h-7 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md inline-flex items-center justify-center transition-colors"
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
@@ -293,14 +306,14 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                                 deleteVoucher(v.id);
                                 setConfirmDeleteId(null);
                               }}
-                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                              className="h-7 px-2 text-[10px] font-bold bg-rose-600 text-white rounded-md inline-flex items-center justify-center"
                             >
                               Delete
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                              className="h-7 px-2 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-md inline-flex items-center justify-center"
                             >
                               No
                             </button>
@@ -309,8 +322,8 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setConfirmDeleteId(v.id)}
-                            title="Delete Voucher"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-w-[30px] min-h-[30px] flex items-center justify-center"
+                            title="Delete Invoice"
+                            className="w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-md transition-colors inline-flex items-center justify-center"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

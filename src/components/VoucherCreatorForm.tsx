@@ -9,7 +9,8 @@ import {
   Printer,
   Download,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Edit2
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import {
@@ -36,9 +37,11 @@ interface VoucherCreatorFormProps {
   initialType?: VoucherType;
   initialPartyId?: string;
   initialIsGstBill?: boolean;
+  editingVoucher?: TransactionVoucher;
   hideTypeSelector?: boolean;
   onCancel?: () => void;
   onSuccess?: (voucher: TransactionVoucher, shouldPrint?: boolean) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
 }
 
 const getNextVoucherPrefix = (t: VoucherType, isGst: boolean) => {
@@ -50,31 +53,56 @@ const getNextVoucherPrefix = (t: VoucherType, isGst: boolean) => {
   return 'DN';
 };
 
+const getInitialCustomerMode = (voucher?: TransactionVoucher): CustomerMode => {
+  if (!voucher) return 'existing';
+  if (voucher.customerMode === 'guest' || (!voucher.partyId && voucher.guestDetails)) {
+    return 'guest';
+  }
+  return 'existing';
+};
+
 export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   initialType = 'SALE',
   initialPartyId = '',
   initialIsGstBill = true,
+  editingVoucher,
   hideTypeSelector = false,
   onCancel,
   onSuccess,
+  onEditVoucher,
 }) => {
-  const { ledgers, inventory, settings, addVoucher, addLedger, getLedgerById } = useAccounting();
+  const { ledgers, inventory, settings, addVoucher, updateVoucher, addLedger, getLedgerById } = useAccounting();
+  const isEditMode = Boolean(editingVoucher);
 
-  const [type, setType] = useState<VoucherType>(initialType);
-  const [isGstBill, setIsGstBill] = useState<boolean>(initialIsGstBill);
-  const [isGstInclusive, setIsGstInclusive] = useState<boolean>(false);
+  const [type, setType] = useState<VoucherType>(editingVoucher?.type ?? initialType);
+  const [isGstBill, setIsGstBill] = useState<boolean>(
+    editingVoucher ? Boolean(editingVoucher.isGstBill) : initialIsGstBill
+  );
+  const [isGstInclusive, setIsGstInclusive] = useState<boolean>(
+    editingVoucher ? Boolean(editingVoucher.isGstInclusive) : false
+  );
   const [voucherNo, setVoucherNo] = useState<string>(() => {
+    if (editingVoucher?.voucherNo) return editingVoucher.voucherNo;
     const prefix = getNextVoucherPrefix(initialType, initialIsGstBill);
     return `${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
   });
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(
+    editingVoucher?.date || new Date().toISOString().split('T')[0]
+  );
 
   // Customer selection mode: Existing | New | Guest (default Existing)
-  const [customerMode, setCustomerMode] = useState<CustomerMode>('existing');
-  const [partyId, setPartyId] = useState<string>(initialPartyId);
+  const [customerMode, setCustomerMode] = useState<CustomerMode>(() =>
+    getInitialCustomerMode(editingVoucher)
+  );
+  const [partyId, setPartyId] = useState<string>(
+    editingVoucher ? editingVoucher.partyId || '' : initialPartyId
+  );
   const [partyQuery, setPartyQuery] = useState<string>(() => {
-    if (!initialPartyId) return '';
-    return ledgers.find(l => l.id === initialPartyId)?.name || '';
+    const targetId = editingVoucher ? editingVoucher.partyId || '' : initialPartyId;
+    if (targetId) {
+      return ledgers.find(l => l.id === targetId)?.name || editingVoucher?.partyName || '';
+    }
+    return '';
   });
 
   // New Customer inline creation fields
@@ -86,16 +114,33 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   const [newCustAddress, setNewCustAddress] = useState('');
 
   // Guest / Walk-In Customer fields
-  const [guestName, setGuestName] = useState('Walk-in Customer');
-  const [guestPhone, setGuestPhone] = useState('');
-  const [guestAddress, setGuestAddress] = useState('');
-  const [guestGstin, setGuestGstin] = useState('');
-  const [guestStateCode, setGuestStateCode] = useState(settings.stateCode || '19');
+  const [guestName, setGuestName] = useState(
+    editingVoucher?.guestDetails?.name ||
+      (editingVoucher && !editingVoucher.partyId && editingVoucher.partyName
+        ? editingVoucher.partyName
+        : 'Walk-in Customer')
+  );
+  const [guestPhone, setGuestPhone] = useState(editingVoucher?.guestDetails?.phone || '');
+  const [guestAddress, setGuestAddress] = useState(editingVoucher?.guestDetails?.address || '');
+  const [guestGstin, setGuestGstin] = useState(editingVoucher?.guestDetails?.gstin || '');
+  const [guestStateCode, setGuestStateCode] = useState(
+    editingVoucher?.guestDetails?.stateCode || settings.stateCode || '19'
+  );
 
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CREDIT');
-  const [referenceNo, setReferenceNo] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
-  const [directAmount, setDirectAmount] = useState<number>(0);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(
+    editingVoucher?.paymentMode || 'CREDIT'
+  );
+  const [referenceNo, setReferenceNo] = useState<string>(editingVoucher?.referenceNo || '');
+  const [notes, setNotes] = useState<string>(editingVoucher?.notes || '');
+  const [directAmount, setDirectAmount] = useState<number>(() => {
+    if (
+      editingVoucher &&
+      !['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(editingVoucher.type)
+    ) {
+      return editingVoucher.grandTotal || 0;
+    }
+    return 0;
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const [savedSuccessMsg, setSavedSuccessMsg] = useState<string | null>(null);
   const [lastSavedVoucher, setLastSavedVoucher] = useState<TransactionVoucher | null>(null);
@@ -123,7 +168,12 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     };
   };
 
-  const [items, setItems] = useState<VoucherLineItem[]>(() => [buildInitialItem(initialIsGstBill)]);
+  const [items, setItems] = useState<VoucherLineItem[]>(() => {
+    if (editingVoucher?.items && editingVoucher.items.length > 0) {
+      return editingVoucher.items.map(it => ({ ...it }));
+    }
+    return [buildInitialItem(editingVoucher ? Boolean(editingVoucher.isGstBill) : initialIsGstBill)];
+  });
 
   // Sync displayed party name when partyId is set programmatically or async ledgers arrive
   useEffect(() => {
@@ -134,13 +184,15 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     }
   }, [partyId, ledgers]);
 
-  // Sync default state codes when async settings arrive
+  // Sync default state codes when async settings arrive (preserve edited guest state code)
   useEffect(() => {
     if (settings.stateCode) {
       setNewCustStateCode(prev => (prev === '19' || !prev ? settings.stateCode : prev));
-      setGuestStateCode(prev => (prev === '19' || !prev ? settings.stateCode : prev));
+      if (!editingVoucher?.guestDetails?.stateCode) {
+        setGuestStateCode(prev => (prev === '19' || !prev ? settings.stateCode : prev));
+      }
     }
-  }, [settings.stateCode]);
+  }, [settings.stateCode, editingVoucher?.guestDetails?.stateCode]);
 
   const selectedParty = customerMode === 'existing' && partyId ? getLedgerById(partyId) : undefined;
   const effectivePartyStateCode =
@@ -162,8 +214,15 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     effectivePartyGstin
   );
 
+  // Skip initial recalculation pass when editing so saved line totals are preserved until tax settings actually change
+  const skipInitialTaxRecalcRef = React.useRef(isEditMode);
+
   // Recalculate all items when tax context changes (GST toggle, Inclusive toggle, or Inter-state change)
   useEffect(() => {
+    if (skipInitialTaxRecalcRef.current) {
+      skipInitialTaxRecalcRef.current = false;
+      return;
+    }
     setItems(prev =>
       prev.map(it => {
         const calc = calculateLineItem(
@@ -260,7 +319,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
 
   const handleToggleGstBill = (val: boolean) => {
     setIsGstBill(val);
-    if (type === 'SALE') {
+    if (!isEditMode && type === 'SALE') {
       const prefix = val ? 'INV' : 'BOS';
       setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
     }
@@ -491,13 +550,17 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         resolvedPartyName = guestName.trim() || 'Walk-in Customer';
       }
 
-      const newVoucherPayload: Omit<TransactionVoucher, 'id'> = {
+      const voucherPayload: Omit<TransactionVoucher, 'id'> = {
         voucherNo: voucherNo.trim(),
         date,
         type,
         partyId: resolvedPartyId,
         partyName: resolvedPartyName,
-        customerMode: supportsCustomerModes ? customerMode : 'existing',
+        customerMode: supportsCustomerModes
+          ? customerMode === 'new'
+            ? 'existing'
+            : customerMode
+          : 'existing',
         guestDetails:
           supportsCustomerModes && customerMode === 'guest'
             ? {
@@ -521,37 +584,51 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         notes: notes.trim() || undefined,
       };
 
-      const createdId = await addVoucher(newVoucherPayload);
-      const createdVoucher: TransactionVoucher = {
-        ...newVoucherPayload,
-        id: createdId,
-        createdAt: new Date().toISOString(),
-      };
+      if (editingVoucher) {
+        const updatedVoucher = await updateVoucher({
+          ...editingVoucher,
+          ...voucherPayload,
+          id: editingVoucher.id,
+          companyId: editingVoucher.companyId,
+          createdAt: editingVoucher.createdAt,
+        });
 
-      setLastSavedVoucher(createdVoucher);
-      setSavedSuccessMsg(`Saved ${createdVoucher.voucherNo} (${formatINR(createdVoucher.grandTotal)})`);
+        setLastSavedVoucher(updatedVoucher);
+        setSavedSuccessMsg(`Updated ${updatedVoucher.voucherNo} (${formatINR(updatedVoucher.grandTotal)})`);
+        if (onSuccess) onSuccess(updatedVoucher, shouldPrint);
+      } else {
+        const createdId = await addVoucher(voucherPayload);
+        const createdVoucher: TransactionVoucher = {
+          ...voucherPayload,
+          id: createdId,
+          createdAt: new Date().toISOString(),
+        };
 
-      // Prepare clean form & number for next voucher if user stays on page
-      const prefix = getNextVoucherPrefix(type, isGstBill);
-      setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
-      setReferenceNo('');
-      setNotes('');
-      setDirectAmount(0);
-      setItems([buildInitialItem(isGstBill)]);
-      if (customerMode === 'new') {
-        setCustomerMode('existing');
-        setPartyId(resolvedPartyId || '');
-        setPartyQuery(resolvedPartyName || '');
-        setNewCustName('');
-        setNewCustPhone('');
-        setNewCustGstin('');
-        setNewCustPan('');
-        setNewCustAddress('');
+        setLastSavedVoucher(createdVoucher);
+        setSavedSuccessMsg(`Saved ${createdVoucher.voucherNo} (${formatINR(createdVoucher.grandTotal)})`);
+
+        // Prepare clean form & number for next voucher if user stays on page
+        const prefix = getNextVoucherPrefix(type, isGstBill);
+        setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
+        setReferenceNo('');
+        setNotes('');
+        setDirectAmount(0);
+        setItems([buildInitialItem(isGstBill)]);
+        if (customerMode === 'new') {
+          setCustomerMode('existing');
+          setPartyId(resolvedPartyId || '');
+          setPartyQuery(resolvedPartyName || '');
+          setNewCustName('');
+          setNewCustPhone('');
+          setNewCustGstin('');
+          setNewCustPan('');
+          setNewCustAddress('');
+        }
+
+        if (onSuccess) onSuccess(createdVoucher, shouldPrint);
       }
-
-      if (onSuccess) onSuccess(createdVoucher, shouldPrint);
     } catch (err: any) {
-      setFormError(err.message || 'Failed to save voucher');
+      setFormError(err.message || 'Failed to save invoice');
     } finally {
       setIsSubmitting(false);
     }
@@ -573,7 +650,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         e.preventDefault();
         submitVoucher(false);
       }}
-      className="space-y-5 text-xs"
+      className="space-y-4 text-xs"
     >
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs font-medium">
@@ -588,11 +665,21 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
             <span>{savedSuccessMsg}</span>
           </div>
           {lastSavedVoucher && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {onEditVoucher && (
+                <button
+                  type="button"
+                  onClick={() => onEditVoucher(lastSavedVoucher)}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 rounded-md font-semibold text-[11px] whitespace-nowrap"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => handleDownloadSavedPdf(lastSavedVoucher)}
-                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px]"
+                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px] whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download PDF</span>
@@ -601,7 +688,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 <button
                   type="button"
                   onClick={() => onSuccess(lastSavedVoucher, true)}
-                  className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 rounded-md font-semibold text-[11px]"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 rounded-md font-semibold text-[11px] whitespace-nowrap"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>Preview &amp; Print</span>
@@ -616,9 +703,9 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       {!hideTypeSelector && (
         <div>
           <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-            Voucher Type
+            Invoice Type
           </label>
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-x-auto">
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-x-auto">
             {(
               [
                 { key: 'SALE', label: 'Sales Invoice' },
@@ -634,8 +721,10 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 type="button"
                 onClick={() => {
                   setType(tab.key);
-                  const prefix = getNextVoucherPrefix(tab.key, isGstBill);
-                  setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
+                  if (!isEditMode) {
+                    const prefix = getNextVoucherPrefix(tab.key, isGstBill);
+                    setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
+                  }
                   if (tab.key !== 'SALE' && tab.key !== 'CREDIT_NOTE') {
                     setCustomerMode('existing');
                   }
@@ -649,7 +738,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                     setPartyQuery('');
                   }
                 }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap min-h-[32px] ${
+                className={`h-8 px-3 text-xs font-medium rounded-md transition-all whitespace-nowrap shrink-0 inline-flex items-center justify-center ${
                   type === tab.key
                     ? 'bg-white dark:bg-slate-700 theme-text shadow-xs font-semibold'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -672,11 +761,11 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 {isGstBill ? 'GST Tax Invoice (CGST / SGST / IGST)' : 'Non-GST Bill of Supply (0% Tax)'}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => handleToggleGstBill(true)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`h-8 px-3 rounded-md text-xs font-semibold transition-all whitespace-nowrap inline-flex items-center justify-center ${
                   isGstBill
                     ? 'theme-bg text-white shadow-xs'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
@@ -687,7 +776,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
               <button
                 type="button"
                 onClick={() => handleToggleGstBill(false)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`h-8 px-3 rounded-md text-xs font-semibold transition-all whitespace-nowrap inline-flex items-center justify-center ${
                   !isGstBill
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
@@ -706,11 +795,11 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                   {isGstInclusive ? 'GST included in item rate' : 'GST added on top of item rate'}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsGstInclusive(false)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  className={`h-8 px-3 rounded-md text-xs font-semibold transition-all whitespace-nowrap inline-flex items-center justify-center ${
                     !isGstInclusive
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
@@ -721,7 +810,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsGstInclusive(true)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  className={`h-8 px-3 rounded-md text-xs font-semibold transition-all whitespace-nowrap inline-flex items-center justify-center ${
                     isGstInclusive
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
@@ -739,7 +828,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-            Invoice / Voucher No *
+            Invoice No *
           </label>
           <input
             type="text"
@@ -771,41 +860,41 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
             <label className="font-semibold text-slate-800 dark:text-slate-200">
               Customer Selection Type
             </label>
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-lg">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 p-1 bg-slate-200/70 dark:bg-slate-800 rounded-lg">
               <button
                 type="button"
                 onClick={() => setCustomerMode('existing')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                className={`flex-1 sm:flex-initial h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-md font-semibold transition-all whitespace-nowrap shrink-0 ${
                   customerMode === 'existing'
                     ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
-                <UserCheck className="w-3.5 h-3.5" />
+                <UserCheck className="w-3.5 h-3.5 shrink-0" />
                 <span>Existing Customer</span>
               </button>
               <button
                 type="button"
                 onClick={() => setCustomerMode('new')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                className={`flex-1 sm:flex-initial h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-md font-semibold transition-all whitespace-nowrap shrink-0 ${
                   customerMode === 'new'
                     ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
-                <UserPlus className="w-3.5 h-3.5" />
+                <UserPlus className="w-3.5 h-3.5 shrink-0" />
                 <span>New Customer</span>
               </button>
               <button
                 type="button"
                 onClick={() => setCustomerMode('guest')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                className={`flex-1 sm:flex-initial h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-md font-semibold transition-all whitespace-nowrap shrink-0 ${
                   customerMode === 'guest'
                     ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
-                <User className="w-3.5 h-3.5" />
+                <User className="w-3.5 h-3.5 shrink-0" />
                 <span>Guest Customer</span>
               </button>
             </div>
@@ -1120,7 +1209,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
             <button
               type="button"
               onClick={addItemRow}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-md transition-colors whitespace-nowrap"
+              className="h-8 inline-flex items-center justify-center gap-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 rounded-lg transition-colors whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Line Item</span>
@@ -1282,9 +1371,10 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                           type="button"
                           onClick={() => removeItemRow(idx)}
                           disabled={items.length <= 1}
-                          className="text-slate-400 hover:text-red-500 disabled:opacity-30 p-1"
+                          className="w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-red-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-30 transition-colors"
+                          title="Remove item"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -1399,7 +1489,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2.5 text-slate-600 hover:text-slate-900 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-medium"
+            className="h-9 px-4 inline-flex items-center justify-center text-xs text-slate-600 hover:text-slate-900 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-semibold whitespace-nowrap shrink-0"
           >
             Cancel
           </button>
@@ -1407,19 +1497,19 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex items-center gap-1.5 px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg disabled:opacity-50"
+          className="h-9 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg disabled:opacity-50 whitespace-nowrap shrink-0"
         >
-          <Save className="w-4 h-4" />
-          <span>Save Invoice</span>
+          <Save className="w-3.5 h-3.5" />
+          <span>{isEditMode ? 'Update Invoice' : 'Save Invoice'}</span>
         </button>
         <button
           type="button"
           disabled={isSubmitting}
           onClick={() => submitVoucher(true)}
-          className="theme-bg theme-bg-hover flex items-center gap-1.5 px-5 py-2.5 font-bold text-white rounded-lg shadow-xs disabled:opacity-50"
+          className="theme-bg theme-bg-hover h-9 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-bold text-white rounded-lg shadow-xs disabled:opacity-50 whitespace-nowrap shrink-0"
         >
-          <Printer className="w-4 h-4" />
-          <span>Save &amp; Print / Download</span>
+          <Printer className="w-3.5 h-3.5" />
+          <span>{isEditMode ? 'Update & Print / Download' : 'Save & Print / Download'}</span>
         </button>
       </div>
     </form>

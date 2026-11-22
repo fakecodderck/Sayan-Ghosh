@@ -120,6 +120,7 @@
   /* Hide app chrome, controls, and background shell when printing modal */
   .no-print,
   .app-printing-hidden,
+  body.portal-print-active #root,
   aside,
   header,
   nav,

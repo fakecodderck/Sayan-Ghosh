@@ -10,51 +10,88 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   BookOpen,
-  Download
+  Download,
+  Edit2,
+  FileBarChart2,
+  Layers,
+  List
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { TransactionVoucher, VoucherType } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 import { downloadInvoicePdf } from '../utils/invoicePdf';
+import {
+  filterDayBookEntries,
+  formatDateReadable,
+  formatDateWithWeekday,
+  groupDayBookEntriesByDate
+} from '../utils/dayBookPdf';
+import { DayBookReportModal } from '../components/DayBookReportModal';
 
 interface DayBookViewProps {
   onSelectVoucherForPrint: (voucher: TransactionVoucher) => void;
+  onEditVoucher?: (voucher: TransactionVoucher) => void;
   onOpenNewVoucher: () => void;
 }
 
 export const DayBookView: React.FC<DayBookViewProps> = ({
   onSelectVoucherForPrint,
+  onEditVoucher,
   onOpenNewVoucher,
 }) => {
   const { vouchers, settings, getLedgerById, deleteVoucher } = useAccounting();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
-  // Default to showing all transactions sorted newest-first so nothing is hidden on first load
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  // Custom date range (defaults to all dates so nothing is hidden on first load)
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [groupByDay, setGroupByDay] = useState<boolean>(true);
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const filteredVouchers = useMemo(() => {
-    return vouchers
-      .filter(v => {
-        if (selectedDate && v.date !== selectedDate) return false;
-        if (selectedType !== 'ALL' && v.type !== selectedType) return false;
+  const todayStr = new Date().toISOString().split('T')[0];
 
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchesNo = v.voucherNo.toLowerCase().includes(q);
-          const matchesParty = (v.guestDetails?.name || v.partyName || '').toLowerCase().includes(q);
-          const matchesNotes = v.notes?.toLowerCase().includes(q);
-          if (!matchesNo && !matchesParty && !matchesNotes) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
-        if (diff !== 0) return diff;
-        return (b.createdAt || '').localeCompare(a.createdAt || '');
-      });
-  }, [vouchers, selectedDate, selectedType, searchQuery]);
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const last7DaysStart = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const thisMonthStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  }, []);
+
+  const selectedCategoryArray = useMemo<VoucherType[]>(
+    () => (selectedType === 'ALL' ? [] : [selectedType as VoucherType]),
+    [selectedType]
+  );
+
+  const filteredVouchers = useMemo(() => {
+    return filterDayBookEntries(
+      vouchers,
+      startDate,
+      endDate,
+      selectedCategoryArray,
+      searchQuery
+    ).sort((a, b) => {
+      const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (diff !== 0) return diff;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }, [vouchers, startDate, endDate, selectedCategoryArray, searchQuery]);
+
+  const dayGroups = useMemo(
+    () => groupDayBookEntriesByDate(filteredVouchers, 'desc'),
+    [filteredVouchers]
+  );
 
   const totalSales = filteredVouchers
     .filter(v => v.type === 'SALE')
@@ -71,8 +108,6 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
   const totalPayments = filteredVouchers
     .filter(v => v.type === 'PAYMENT')
     .reduce((a, b) => a + b.grandTotal, 0);
-
-  const todayStr = new Date().toISOString().split('T')[0];
 
   const getVoucherBadgeClass = (type: VoucherType) => {
     switch (type) {
@@ -93,27 +128,156 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
     }
   };
 
+  const renderEntryRow = (v: TransactionVoucher) => (
+    <tr
+      key={v.id}
+      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+    >
+      <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
+        {v.date}
+      </td>
+      <td className="py-3 px-3 font-mono tabular-nums font-bold text-slate-900 dark:text-slate-200 whitespace-nowrap">
+        {v.voucherNo}
+      </td>
+      <td className="py-3 px-3 whitespace-nowrap">
+        <span
+          className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${getVoucherBadgeClass(
+            v.type
+          )}`}
+        >
+          {v.type.replace('_', ' ')}
+        </span>
+      </td>
+      <td className="py-3 px-3">
+        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[220px]">
+          {v.guestDetails?.name || v.partyName || 'Direct Cash Entry'}
+        </p>
+        {v.notes && (
+          <p className="text-[10px] text-slate-400 truncate max-w-[220px]">{v.notes}</p>
+        )}
+      </td>
+      <td className="py-3 px-3 font-mono text-slate-500 text-[11px] whitespace-nowrap">
+        {v.paymentMode}
+      </td>
+      <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
+        {formatINR(v.subtotal)}
+      </td>
+      <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
+        {formatINR(v.cgstTotal + v.sgstTotal + v.igstTotal)}
+      </td>
+      <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-950 dark:text-slate-100 text-sm whitespace-nowrap">
+        {formatINR(v.grandTotal)}
+      </td>
+      <td className="py-3 px-3 text-center whitespace-nowrap">
+        <div className="flex items-center justify-center gap-1">
+          {onEditVoucher && (
+            <button
+              type="button"
+              onClick={() => onEditVoucher(v)}
+              title="Edit Invoice"
+              className="w-7 h-7 text-slate-600 hover:text-blue-600 hover:bg-blue-50 dark:text-slate-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              downloadInvoicePdf({
+                voucher: v,
+                settings,
+                party: v.partyId ? getLedgerById(v.partyId) : undefined,
+                useCustomTemplate: Boolean(
+                  settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length
+                ),
+              })
+            }
+            title="Download PDF"
+            className="w-7 h-7 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 dark:text-slate-400 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectVoucherForPrint(v)}
+            title="Print / Preview Invoice"
+            className="w-7 h-7 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md inline-flex items-center justify-center transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5" />
+          </button>
+          {confirmDeleteId === v.id ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  deleteVoucher(v.id);
+                  setConfirmDeleteId(null);
+                }}
+                className="h-7 px-2 text-[10px] font-bold bg-rose-600 text-white rounded-md inline-flex items-center justify-center"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                className="h-7 px-2 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-md inline-flex items-center justify-center"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteId(v.id)}
+              title="Delete Invoice"
+              className="w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-md inline-flex items-center justify-center transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+
+  const isTodayActive = startDate === todayStr && endDate === todayStr;
+  const isYesterdayActive = startDate === yesterdayStr && endDate === yesterdayStr;
+  const isLast7Active = startDate === last7DaysStart && endDate === todayStr;
+  const isThisMonthActive = startDate === thisMonthStart && endDate === todayStr;
+  const isAllDatesActive = !startDate && !endDate;
+
   return (
-    <div className="space-y-6">
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      {/* Header & Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Day Book (Roznamcha)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Chronological accounting journal of all sales, purchases, receipts, and payments
+            Day-wise accounting register of all sales, purchases, receipts, and payments
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenNewVoucher}
-          className="theme-bg hover:opacity-95 active:scale-95 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-xs transition-all flex items-center justify-center gap-2 min-h-[40px] whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Voucher Entry</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowReportModal(true)}
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold shadow-2xs transition-all whitespace-nowrap shrink-0"
+          >
+            <FileBarChart2 className="w-3.5 h-3.5 theme-text" />
+            <span>Print / Export Report</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenNewVoucher}
+            className="h-9 theme-bg hover:opacity-95 active:scale-95 text-white text-xs font-semibold px-3.5 rounded-lg shadow-xs transition-all inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Invoice</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Summary Cards */}
@@ -167,34 +331,50 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-            <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by invoice #, party name, or remarks..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 focus:bg-white focus:outline-hidden"
-              />
-            </div>
+      {/* Filter, Custom Date Range, and Search Bar */}
+      <div className="p-3 sm:p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by invoice #, party name, or remarks..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-9 pr-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden theme-ring"
+            />
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400 shrink-0">
-              <Calendar className="w-4 h-4 text-slate-400" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 font-mono font-medium"
-              />
+          {/* Custom Date Range + Quick Presets */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              aria-label="From date"
+              title="From Date"
+              className="h-9 px-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 font-mono font-medium"
+            />
+            <span className="text-slate-400 font-medium">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              aria-label="To date"
+              title="To Date"
+              className="h-9 px-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 font-mono font-medium"
+            />
+
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
-                onClick={() => setSelectedDate(todayStr)}
-                className={`px-2.5 py-1.5 text-[11px] rounded-lg font-medium transition-all ${
-                  selectedDate === todayStr
+                onClick={() => {
+                  setStartDate(todayStr);
+                  setEndDate(todayStr);
+                }}
+                className={`h-8 px-2.5 text-[11px] rounded-lg font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                  isTodayActive
                     ? 'theme-soft-badge font-bold'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
@@ -204,19 +384,53 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const d = new Date();
-                  d.setDate(d.getDate() - 1);
-                  setSelectedDate(d.toISOString().split('T')[0]);
+                  setStartDate(yesterdayStr);
+                  setEndDate(yesterdayStr);
                 }}
-                className="px-2.5 py-1.5 text-[11px] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium"
+                className={`h-8 px-2.5 text-[11px] rounded-lg font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                  isYesterdayActive
+                    ? 'theme-soft-badge font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
               >
                 Yesterday
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedDate('')}
-                className={`px-2.5 py-1.5 text-[11px] rounded-lg font-medium transition-all ${
-                  selectedDate === ''
+                onClick={() => {
+                  setStartDate(last7DaysStart);
+                  setEndDate(todayStr);
+                }}
+                className={`h-8 px-2.5 text-[11px] rounded-lg font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                  isLast7Active
+                    ? 'theme-soft-badge font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                Last 7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate(thisMonthStart);
+                  setEndDate(todayStr);
+                }}
+                className={`h-8 px-2.5 text-[11px] rounded-lg font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                  isThisMonthActive
+                    ? 'theme-soft-badge font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className={`h-8 px-2.5 text-[11px] rounded-lg font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                  isAllDatesActive
                     ? 'theme-soft-badge font-bold'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
@@ -225,8 +439,11 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/90 rounded-lg overflow-x-auto">
+        {/* Category Filter + Day-Wise Grouping Toggle */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="h-9 inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/90 rounded-lg overflow-x-auto">
             {(
               [
                 { key: 'ALL', label: 'All' },
@@ -242,7 +459,7 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
                 key={f.key}
                 type="button"
                 onClick={() => setSelectedType(f.key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap min-h-[30px] ${
+                className={`h-7 px-3 text-xs font-medium rounded-md transition-all inline-flex items-center justify-center whitespace-nowrap shrink-0 ${
                   selectedType === f.key
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs font-bold'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -251,6 +468,38 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
                 {f.label}
               </button>
             ))}
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+            <span className="text-[11px] font-mono text-slate-500 whitespace-nowrap">
+              {filteredVouchers.length} {filteredVouchers.length === 1 ? 'invoice' : 'invoices'}
+            </span>
+            <div className="h-9 inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-[11px]">
+              <button
+                type="button"
+                onClick={() => setGroupByDay(true)}
+                className={`h-7 inline-flex items-center justify-center gap-1 px-2.5 rounded-md font-semibold transition-all whitespace-nowrap ${
+                  groupByDay
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Day-Wise</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupByDay(false)}
+                className={`h-7 inline-flex items-center justify-center gap-1 px-2.5 rounded-md font-semibold transition-all whitespace-nowrap ${
+                  !groupByDay
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Flat List</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -262,8 +511,8 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
             <thead>
               <tr className="bg-slate-50/80 dark:bg-slate-800/50 text-slate-500 uppercase font-semibold text-[10px] border-b border-slate-200 dark:border-slate-800">
                 <th className="py-3 px-4 w-24">Date</th>
-                <th className="py-3 px-3 w-32">Voucher No</th>
-                <th className="py-3 px-3 w-28">Type</th>
+                <th className="py-3 px-3 w-32">Invoice No</th>
+                <th className="py-3 px-3 w-28">Category</th>
                 <th className="py-3 px-3 min-w-[180px]">Party / Particulars</th>
                 <th className="py-3 px-3 w-20">Mode</th>
                 <th className="py-3 px-3 w-24 text-right">Taxable</th>
@@ -275,137 +524,104 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredVouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
-                    <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3">
-                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 theme-text rounded-xl flex items-center justify-center">
-                        <BookOpen className="w-6 h-6" />
+                  <td colSpan={9} className="py-10 text-center">
+                    <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-2.5">
+                      <div className="w-11 h-11 bg-slate-100 dark:bg-slate-800 theme-text rounded-xl flex items-center justify-center">
+                        <BookOpen className="w-5 h-5" />
                       </div>
                       <div className="space-y-1">
                         <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                          No Day Book Transactions
+                          No Day Book Invoices
                         </h4>
                         <p className="text-xs text-slate-500">
-                          {selectedDate || selectedType !== 'ALL' || searchQuery
-                            ? 'No entries match your current search or date filter.'
-                            : 'Start by recording your first sale, purchase, or receipt entry.'}
+                          {startDate || endDate || selectedType !== 'ALL' || searchQuery
+                            ? 'No entries match your current search, category, or date range.'
+                            : 'Start by recording your first sale, purchase, or receipt invoice.'}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={onOpenNewVoucher}
-                        className="mt-2 theme-bg text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-xs hover:opacity-90 transition-all flex items-center gap-1.5"
+                        className="h-9 mt-1 theme-bg text-white text-xs font-semibold px-3.5 rounded-lg shadow-xs hover:opacity-90 transition-all inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Record First Entry</span>
+                        <span>Record First Invoice</span>
                       </button>
                     </div>
                   </td>
                 </tr>
-              ) : (
-                filteredVouchers.map(v => (
-                  <tr
-                    key={v.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                      {v.date}
-                    </td>
-                    <td className="py-3 px-3 font-mono tabular-nums font-bold text-slate-900 dark:text-slate-200 whitespace-nowrap">
-                      {v.voucherNo}
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${getVoucherBadgeClass(
-                          v.type
-                        )}`}
-                      >
-                        {v.type.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <p className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[220px]">
-                        {v.guestDetails?.name || v.partyName || 'Direct Cash Entry'}
-                      </p>
-                      {v.notes && (
-                        <p className="text-[10px] text-slate-400 truncate max-w-[220px]">{v.notes}</p>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-500 text-[11px] whitespace-nowrap">
-                      {v.paymentMode}
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                      {formatINR(v.subtotal)}
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono tabular-nums text-slate-500 whitespace-nowrap">
-                      {formatINR(v.cgstTotal + v.sgstTotal + v.igstTotal)}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-950 dark:text-slate-100 text-sm whitespace-nowrap">
-                      {formatINR(v.grandTotal)}
-                    </td>
-                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            downloadInvoicePdf({
-                              voucher: v,
-                              settings,
-                              party: v.partyId ? getLedgerById(v.partyId) : undefined,
-                              useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
-                            })
-                          }
-                          title="Download PDF"
-                          className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 dark:text-slate-400 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30 rounded-lg min-w-[30px] min-h-[30px] flex items-center justify-center transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onSelectVoucherForPrint(v)}
-                          title="Print / Preview Invoice"
-                          className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-w-[30px] min-h-[30px] flex items-center justify-center transition-colors"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
-                        {confirmDeleteId === v.id ? (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                deleteVoucher(v.id);
-                                setConfirmDeleteId(null);
-                              }}
-                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
-                            >
-                              Delete
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                            >
-                              No
-                            </button>
+              ) : groupByDay ? (
+                dayGroups.map(group => {
+                  const breakdownParts: string[] = [];
+                  if (group.sales > 0) breakdownParts.push(`Sales ${formatINR(group.sales)}`);
+                  if (group.purchases > 0) breakdownParts.push(`Purchases ${formatINR(group.purchases)}`);
+                  if (group.receipts > 0) breakdownParts.push(`Receipts ${formatINR(group.receipts)}`);
+                  if (group.payments > 0) breakdownParts.push(`Payments ${formatINR(group.payments)}`);
+
+                  return (
+                    <React.Fragment key={group.date}>
+                      <tr className="bg-slate-100/90 dark:bg-slate-800/80 border-y border-slate-200 dark:border-slate-700">
+                        <td colSpan={5} className="py-2 px-4">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                              {formatDateWithWeekday(group.date)}
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                              {group.entries.length} {group.entries.length === 1 ? 'invoice' : 'invoices'}
+                            </span>
+                            {breakdownParts.length > 0 && (
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden md:inline">
+                                · {breakdownParts.join(' · ')}
+                              </span>
+                            )}
                           </div>
-                        ) : (
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {formatINR(group.taxable)}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {formatINR(group.gst)}
+                        </td>
+                        <td className="py-2 px-4 text-right font-mono tabular-nums text-xs font-extrabold theme-text whitespace-nowrap">
+                          {formatINR(group.grandTotal)}
+                        </td>
+                        <td className="py-2 px-3 text-center">
                           <button
                             type="button"
-                            onClick={() => setConfirmDeleteId(v.id)}
-                            title="Delete Voucher"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg min-w-[30px] min-h-[30px] flex items-center justify-center transition-colors"
+                            onClick={() => {
+                              setStartDate(group.date);
+                              setEndDate(group.date);
+                              setShowReportModal(true);
+                            }}
+                            title={`Print / Export Report for ${formatDateReadable(group.date)}`}
+                            className="h-7 inline-flex items-center justify-center gap-1 px-2 text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 border border-slate-300/80 dark:border-slate-600 rounded-md transition-colors whitespace-nowrap"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Printer className="w-3 h-3" />
+                            <span>Day PDF</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        </td>
+                      </tr>
+                      {group.entries.map(renderEntryRow)}
+                    </React.Fragment>
+                  );
+                })
+              ) : (
+                filteredVouchers.map(renderEntryRow)
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Day Book Print & Export Report Modal */}
+      {showReportModal && (
+        <DayBookReportModal
+          initialStartDate={startDate}
+          initialEndDate={endDate}
+          initialCategory={selectedType}
+          onClose={() => setShowReportModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -185,9 +185,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Stock &amp; Inventory Management
@@ -200,9 +200,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
         <button
           type="button"
           onClick={openAddModal}
-          className="flex items-center gap-1.5 px-4 py-2.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap min-h-[40px]"
+          className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 theme-bg theme-bg-hover active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0 self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Add Product / SKU</span>
         </button>
       </div>
@@ -249,30 +249,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
       </div>
 
       {/* Search and Filters */}
-      <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+      <div className="p-3 sm:p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search product name, SKU, category, or HSN..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden"
+            className="w-full h-9 pl-9 pr-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 focus:outline-hidden"
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setFilterAlertOnly(!filterAlertOnly)}
-          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors min-h-[38px] ${
-            filterAlertOnly
-              ? 'bg-amber-600 text-white border-amber-600'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          <span>Low Stock Only ({lowStockCount})</span>
-        </button>
+        <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+          <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
+            Showing {filteredInventory.length} of {inventory.length} items
+          </span>
+          <button
+            type="button"
+            onClick={() => setFilterAlertOnly(!filterAlertOnly)}
+            className={`h-9 inline-flex items-center justify-center gap-1.5 px-3.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+              filterAlertOnly
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>Low Stock Only ({lowStockCount})</span>
+          </button>
+        </div>
       </div>
 
       {/* Inventory Table */}
@@ -297,10 +302,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
-                    <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-3">
-                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-blue-600 rounded-xl flex items-center justify-center">
-                        <Boxes className="w-6 h-6" />
+                  <td colSpan={9} className="py-10 text-center">
+                    <div className="max-w-sm mx-auto flex flex-col items-center justify-center space-y-2.5">
+                      <div className="w-11 h-11 bg-slate-100 dark:bg-slate-800 text-blue-600 rounded-xl flex items-center justify-center">
+                        <Boxes className="w-5 h-5" />
                       </div>
                       <div className="space-y-1">
                         <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
@@ -315,7 +320,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                       <button
                         type="button"
                         onClick={openAddModal}
-                        className="mt-2 theme-bg text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-xs hover:opacity-90 transition-all flex items-center gap-1.5"
+                        className="mt-1 h-9 theme-bg text-white text-xs font-semibold px-4 rounded-lg shadow-xs hover:opacity-90 transition-all inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add First Product</span>
@@ -365,12 +370,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="inline-flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => setSelectedItemId(item.id)}
                             title="Item Stock Register"
-                            className="p-1.5 theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                            className="w-7 h-7 inline-flex items-center justify-center theme-text hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
                           </button>
@@ -378,7 +383,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                             type="button"
                             onClick={() => openEditModal(item)}
                             title="Edit Product"
-                            className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                            className="w-7 h-7 inline-flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -386,26 +391,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                             type="button"
                             onClick={() => setAdjustItem(item)}
                             title="Adjust Stock"
-                            className="px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded font-medium border border-slate-200 dark:border-slate-700"
+                            className="h-7 px-2.5 inline-flex items-center justify-center text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md font-semibold border border-slate-200 dark:border-slate-700 whitespace-nowrap transition-colors"
                           >
                             +/- Stock
                           </button>
                           {confirmDeleteId === item.id ? (
-                            <div className="flex items-center gap-1">
+                            <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => {
                                   deleteInventoryItem(item.id);
                                   setConfirmDeleteId(null);
                                 }}
-                                className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded"
+                                className="h-7 px-2 text-[10px] font-bold bg-rose-600 text-white rounded-md inline-flex items-center whitespace-nowrap"
                               >
                                 Delete
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteId(null)}
-                                className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-800"
+                                className="h-7 px-1.5 text-[10px] text-slate-500 hover:text-slate-800 inline-flex items-center whitespace-nowrap"
                               >
                                 No
                               </button>
@@ -415,7 +420,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                               type="button"
                               onClick={() => setConfirmDeleteId(item.id)}
                               title="Delete Product"
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded"
+                              className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -484,14 +489,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
               <button
                 type="button"
                 onClick={() => setAdjustItem(null)}
-                className="px-3.5 py-2 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                className="h-9 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors inline-flex items-center justify-center whitespace-nowrap"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApplyAdjustment}
-                className="px-4 py-2 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs"
+                className="h-9 px-4 text-xs font-semibold text-white theme-bg theme-bg-hover rounded-lg shadow-xs inline-flex items-center justify-center whitespace-nowrap"
               >
                 Apply Adjustment
               </button>
@@ -678,13 +683,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onNavigateToAddPro
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  className="h-9 px-4 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors font-semibold inline-flex items-center justify-center whitespace-nowrap"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-semibold text-white theme-bg theme-bg-hover rounded-lg"
+                  className="h-9 px-4 font-semibold text-white theme-bg theme-bg-hover rounded-lg inline-flex items-center justify-center whitespace-nowrap"
                 >
                   {editingItem ? 'Update Product' : 'Save Product'}
                 </button>
