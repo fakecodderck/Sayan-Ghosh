@@ -7,7 +7,8 @@ import {
   Check,
   FileText,
   Search,
-  LayoutTemplate
+  LayoutTemplate,
+  ChevronDown
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { formatINR, numberToWordsINR } from '../utils/gstCalculations';
@@ -81,6 +82,8 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
     return 'TAX INVOICE';
   });
   const [isSavedSettings, setIsSavedSettings] = useState(false);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const printMenuRef = useRef<HTMLDivElement>(null);
   const lastSyncedInvoiceIdRef = useRef<string | undefined>(currentInvoice?.id);
 
   // Sync defaults when settings load asynchronously
@@ -91,6 +94,23 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
       setUseCustomTemplate(true);
     }
   }, [settings]);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (printMenuRef.current && !printMenuRef.current.contains(e.target as Node)) {
+        setShowPrintOptions(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowPrintOptions(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, []);
 
   // Keep header title synced when the active invoice changes
   useEffect(() => {
@@ -136,9 +156,20 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
     hsnBreakup[key].totalTax += item.cgst + item.sgst + item.igst;
   });
 
-  const handlePrint = () => {
-    window.focus();
-    window.print();
+  const handlePrintWithSize = (targetSize: 'A5' | 'A4') => {
+    setShowPrintOptions(false);
+    if (paperSize !== targetSize) {
+      setPaperSize(targetSize);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.focus();
+          window.print();
+        });
+      });
+    } else {
+      window.focus();
+      window.print();
+    }
   };
 
   const handleDownloadPdf = () => {
@@ -181,8 +212,8 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
       <style>{`
         @media print {
           @page {
-            size: ${paperSize} portrait;
-            margin: 5mm;
+            size: A4 portrait;
+            margin: 0mm;
           }
         }
       `}</style>
@@ -232,15 +263,60 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
             <span>Download PDF</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={!currentInvoice}
-            className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 theme-bg theme-bg-hover disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print {paperSize}</span>
-          </button>
+          <div className="relative" ref={printMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowPrintOptions(prev => !prev)}
+              disabled={!currentInvoice}
+              className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 theme-bg theme-bg-hover disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+            </button>
+
+            {showPrintOptions && (
+              <div className="absolute right-0 mt-1.5 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-1.5 z-50 space-y-1">
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Choose Print Format
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handlePrintWithSize('A4')}
+                  className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                    paperSize === 'A4'
+                      ? 'theme-soft-badge'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold">A4 — Full Page</p>
+                    <p className="text-[10px] opacity-75">210 × 297 mm full sheet</p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-current/20">
+                    A4
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintWithSize('A5')}
+                  className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                    paperSize === 'A5'
+                      ? 'theme-soft-badge'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold">A5 — Half A4 Xerox Page</p>
+                    <p className="text-[10px] opacity-75">Top half (210 × 148 mm) on A4</p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-current/20">
+                    A5
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -391,8 +467,8 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                       : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <p className="text-xs">A5 Portrait</p>
-                  <p className="text-[10px] text-slate-400 font-mono tabular-nums">148 × 210 mm</p>
+                  <p className="text-xs">A5 (Half A4)</p>
+                  <p className="text-[10px] text-slate-400 font-mono tabular-nums">Top half · 210 × 148 mm</p>
                 </button>
 
                 <button
@@ -404,8 +480,8 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                       : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <p className="text-xs">A4 Standard</p>
-                  <p className="text-[10px] text-slate-400 font-mono tabular-nums">210 × 297 mm</p>
+                  <p className="text-xs">A4 (Full Page)</p>
+                  <p className="text-[10px] text-slate-400 font-mono tabular-nums">Full sheet · 210 × 297 mm</p>
                 </button>
               </div>
             </div>
@@ -484,11 +560,13 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
         </div>
 
         {/* Right Column: Live Printable Sheet Viewport */}
-        <div className="print-viewport-wrapper lg:col-span-8 bg-slate-200 dark:bg-slate-950 p-3 sm:p-6 rounded-xl flex justify-center overflow-x-auto w-full max-w-full">
+        <div className="print-viewport-wrapper lg:col-span-8 bg-slate-200 dark:bg-slate-950 p-3 sm:p-6 rounded-xl flex justify-center items-start overflow-x-auto w-full max-w-full">
           {currentInvoice ? (
             <div
-              className={`print-only-container bg-white text-slate-900 p-4 sm:p-6 shadow-md border border-slate-300 font-sans text-xs leading-relaxed w-full ${
-                paperSize === 'A5' ? 'max-w-[560px]' : 'max-w-[740px]'
+              className={`print-only-container bg-white text-slate-900 shadow-md border border-slate-300 font-sans w-full flex flex-col ${
+                paperSize === 'A5'
+                  ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 text-[11px] leading-snug'
+                  : 'print-sheet-a4 max-w-[760px] min-h-[920px] p-5 sm:p-7 text-xs leading-relaxed'
               }`}
             >
               {useCustomTemplate && settings.invoiceTemplate ? (
@@ -672,6 +750,16 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                           <span>{formatINR(currentInvoice.igstTotal)}</span>
                         </div>
                       )}
+                      {Math.abs(currentInvoice.roundOff || 0) > 0 && (
+                        <div className="flex justify-between text-slate-700">
+                          <span>Round Off:</span>
+                          <span>
+                            {(currentInvoice.roundOff || 0) > 0
+                              ? `+${formatINR(currentInvoice.roundOff!)}`
+                              : `-${formatINR(Math.abs(currentInvoice.roundOff!))}`}
+                          </span>
+                        </div>
+                      )}
                       <div className="border-t border-slate-900 pt-1 flex justify-between font-bold text-xs text-slate-950">
                         <span>Grand Total:</span>
                         <span>{formatINR(currentInvoice.grandTotal)}</span>
@@ -715,7 +803,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                   )}
 
                   {/* Footer */}
-                  <div className="grid grid-cols-12 gap-3 pt-2 border-t border-slate-300 text-[9px] print-avoid-break">
+                  <div className="print-footer-anchor grid grid-cols-12 gap-3 pt-2 border-t border-slate-300 text-[9px] print-avoid-break">
                     <div className="col-span-7">
                       <p className="font-bold uppercase text-slate-600">Declaration &amp; Terms:</p>
                       <p className="text-slate-500 whitespace-pre-line leading-tight mt-0.5">
@@ -731,6 +819,13 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                     </div>
                   </div>
                 </>
+              )}
+
+              {paperSize === 'A5' && (
+                <div className="print-cut-guide mt-2 pt-1 border-t border-dashed border-slate-300 flex items-center justify-between text-[8px] text-slate-400 select-none">
+                  <span>✂ A5 Half-Page (Prints on Top Half of A4 Xerox)</span>
+                  <span>Cut / Fold Here</span>
+                </div>
               )}
             </div>
           ) : (

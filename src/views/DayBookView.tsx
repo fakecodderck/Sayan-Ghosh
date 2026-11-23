@@ -137,7 +137,7 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
         {v.date}
       </td>
       <td className="py-3 px-3 font-mono tabular-nums font-bold text-slate-900 dark:text-slate-200 whitespace-nowrap">
-        {v.voucherNo}
+        {v.voucherNo || '—'}
       </td>
       <td className="py-3 px-3 whitespace-nowrap">
         <span

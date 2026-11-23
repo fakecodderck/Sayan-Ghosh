@@ -76,21 +76,24 @@ service cloud.firestore {
                'id', 'companyId', 'voucherNo', 'date', 'type',
                'partyId', 'partyName', 'customerMode', 'guestDetails',
                'isGstBill', 'isGstInclusive', 'paymentMode', 'referenceNo',
-               'subtotal', 'cgstTotal', 'sgstTotal', 'igstTotal', 'grandTotal',
-               'items', 'journalEntries', 'notes',
+               'subtotal', 'cgstTotal', 'sgstTotal', 'igstTotal', 'roundOff', 'grandTotal',
+               'items', 'receiptEntries', 'journalEntries', 'notes',
                'createdBy', 'createdAt', 'updatedAt',
                'sourceBranchId', 'destinationBranchId'
              ]) &&
              data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
-             data.voucherNo is string && data.voucherNo.size() > 0 && data.voucherNo.size() <= 50 &&
+             data.voucherNo is string && data.voucherNo.size() <= 50 &&
+             (data.type == 'RECEIPT' || data.voucherNo.size() > 0) &&
              data.date is string && data.date.size() > 0 && data.date.size() <= 35 &&
              data.type in ['SALE', 'PURCHASE', 'PAYMENT', 'RECEIPT', 'CONTRA', 'CREDIT_NOTE', 'DEBIT_NOTE', 'STOCK_TRANSFER'] &&
              data.grandTotal is number &&
+             (!('roundOff' in data) || (data.roundOff is number && data.roundOff >= -1000 && data.roundOff <= 1000)) &&
              (!('customerMode' in data) || data.customerMode in ['existing', 'new', 'guest']) &&
              (!('paymentMode' in data) || data.paymentMode in ['CASH', 'BANK', 'UPI', 'CREDIT']) &&
              (!('isGstBill' in data) || data.isGstBill is bool) &&
              (!('isGstInclusive' in data) || data.isGstInclusive is bool) &&
              (!('items' in data) || (data.items is list && data.items.size() <= 200)) &&
+             (!('receiptEntries' in data) || (data.receiptEntries is list && data.receiptEntries.size() <= 100 && (data.receiptEntries.size() == 0 || data.receiptEntries[0] is map))) &&
              (!('journalEntries' in data) || (data.journalEntries is list && data.journalEntries.size() <= 100)) &&
              (!('guestDetails' in data) || data.guestDetails is map) &&
              (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&

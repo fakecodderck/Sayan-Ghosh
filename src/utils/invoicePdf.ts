@@ -54,7 +54,7 @@ function getDocTitle(voucher: TransactionVoucher, overrideTitle?: string): strin
   if (voucher.type === 'DEBIT_NOTE') return 'DEBIT NOTE (PURCHASE RETURN)';
   if (voucher.type === 'PURCHASE') return 'PURCHASE INVOICE';
   if (voucher.type === 'PAYMENT') return 'PAYMENT INVOICE';
-  if (voucher.type === 'RECEIPT') return 'RECEIPT INVOICE';
+  if (voucher.type === 'RECEIPT') return 'PAYMENT RECEIPT';
   if (voucher.type === 'CONTRA') return 'CONTRA INVOICE';
   return voucher.isGstBill ? 'TAX INVOICE' : 'BILL OF SUPPLY';
 }
@@ -102,7 +102,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: isA5 ? 'a5' : 'a4',
+    format: 'a4',
     compress: true,
   });
 
@@ -110,34 +110,48 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
   const pageH = doc.internal.pageSize.getHeight();
   const margin = isA5 ? 6.5 : 9.5;
   const cw = pageW - margin * 2;
-  const maxY = pageH - margin;
+  // In A5 mode, render strictly within the TOP HALF (0..147mm) of an A4 Xerox sheet
+  const maxY = isA5 ? 144 : pageH - margin;
 
   const fontName =
     tpl?.fontFamily === 'mono' ? 'courier' : tpl?.fontFamily === 'serif' ? 'times' : 'helvetica';
   const [ar, ag, ab] = hexToRgb(tpl?.accentColor || '#0f172a');
 
   const itemsCount = (voucher.items || []).length;
-  // Auto-tighten spacing when there are many items so invoice stays on 1 page
-  const isDense = isA5 ? itemsCount > 6 : itemsCount > 12;
-  const fsBase = isA5 ? (isDense ? 7.2 : 7.8) : isDense ? 8.2 : 9;
-  const fsSmall = fsBase - 1;
-  const lineH = isA5 ? (isDense ? 3.2 : 3.6) : isDense ? 3.6 : 4.2;
+  // Auto-tighten spacing when there are many items so invoice stays within 1 half-page (A5) or 1 full page (A4)
+  const isDense = isA5 ? itemsCount > 5 : itemsCount > 12;
+  const fsBase = isA5 ? (isDense ? 6.8 : 7.4) : isDense ? 8.4 : 9.4;
+  const fsSmall = fsBase - 0.9;
+  const lineH = isA5 ? (isDense ? 2.85 : 3.2) : isDense ? 3.8 : 4.4;
 
-  const partyName =
-    party?.name ||
-    voucher.guestDetails?.name ||
-    voucher.partyName ||
-    (voucher.type === 'PAYMENT' ? 'Expense Payment' : 'Walk-in / Cash Customer');
-  const partyAddress = party?.address || voucher.guestDetails?.address || '';
-  const partyGstin = party?.gstin || voucher.guestDetails?.gstin || '';
-  const partyPhone = party?.phone || voucher.guestDetails?.phone || '';
-  const partyStateCode = party?.stateCode || voucher.guestDetails?.stateCode || settings.stateCode || '';
+  const isReceipt = voucher.type === 'RECEIPT';
+  const receiptEntries = isReceipt ? voucher.receiptEntries || [] : [];
+  const hasMultiCustomerReceipt = isReceipt && receiptEntries.length > 1;
+
+  const partyName = hasMultiCustomerReceipt
+    ? `${receiptEntries.length} Customers (${receiptEntries.map(r => r.partyName).join(', ')})`
+    : party?.name ||
+      (receiptEntries.length === 1 ? receiptEntries[0].partyName : '') ||
+      voucher.guestDetails?.name ||
+      voucher.partyName ||
+      (voucher.type === 'PAYMENT' ? 'Expense Payment' : 'Walk-in / Cash Customer');
+  const partyAddress = hasMultiCustomerReceipt ? '' : party?.address || voucher.guestDetails?.address || '';
+  const partyGstin = hasMultiCustomerReceipt ? '' : party?.gstin || voucher.guestDetails?.gstin || '';
+  const partyPhone = hasMultiCustomerReceipt ? '' : party?.phone || voucher.guestDetails?.phone || '';
+  const partyStateCode = hasMultiCustomerReceipt
+    ? ''
+    : party?.stateCode || voucher.guestDetails?.stateCode || settings.stateCode || '';
 
   const isGoodsDoc = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(voucher.type);
 
   const upiUri =
     showQrCode && settings.upiId
-      ? buildUpiPaymentUri(settings.upiId, settings.name, voucher.grandTotal, `Inv ${voucher.voucherNo}`)
+      ? buildUpiPaymentUri(
+          settings.upiId,
+          settings.name,
+          voucher.grandTotal,
+          voucher.voucherNo ? `Inv ${voucher.voucherNo}` : 'Receipt'
+        )
       : '';
 
   const hsnBreakup: Record<
@@ -230,8 +244,10 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     doc.setFont(fontName, 'normal');
     doc.setFontSize(fsSmall);
     doc.setTextColor(51, 65, 85);
-    doc.text(`Doc No: ${voucher.voucherNo}`, rightX, rightY, { align: 'right' });
-    rightY += lineH - 0.3;
+    if (voucher.voucherNo) {
+      doc.text(`Doc No: ${voucher.voucherNo}`, rightX, rightY, { align: 'right' });
+      rightY += lineH - 0.3;
+    }
     doc.text(`Date: ${voucher.date}  |  Mode: ${voucher.paymentMode}`, rightX, rightY, { align: 'right' });
     if (voucher.referenceNo) {
       rightY += lineH - 0.3;
@@ -251,12 +267,15 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
       (voucher.type === 'PAYMENT'
         ? 'PAID TO (BENEFICIARY)'
         : voucher.type === 'RECEIPT'
-        ? 'RECEIVED FROM (CUSTOMER)'
+        ? hasMultiCustomerReceipt
+          ? `RECEIVED FROM (${receiptEntries.length} CUSTOMERS)`
+          : 'RECEIVED FROM (CUSTOMER)'
         : voucher.type === 'PURCHASE'
         ? 'SUPPLIER DETAILS'
         : 'BILLED TO (PARTY DETAILS)');
     const modeTag = voucher.customerMode === 'guest' ? '  [Guest]' : '';
 
+    const partyTitleLines = (doc.splitTextToSize(partyName, cw - 5) as string[]).slice(0, 2);
     const addrLines = partyAddress ? (doc.splitTextToSize(partyAddress, cw - 5) as string[]).slice(0, 2) : [];
     const detailsLineParts: string[] = [];
     if (partyGstin) detailsLineParts.push(`GSTIN: ${partyGstin}`);
@@ -265,10 +284,12 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     const noteLines = voucher.notes ? (doc.splitTextToSize(`Note: ${voucher.notes}`, cw - 5) as string[]).slice(0, 1) : [];
 
     const boxH =
-      7.5 +
+      3.5 +
+      partyTitleLines.length * lineH +
       addrLines.length * (lineH - 0.3) +
       (detailsLineParts.length > 0 ? lineH - 0.2 : 0) +
-      (noteLines.length > 0 ? lineH : 0);
+      (noteLines.length > 0 ? lineH : 0) +
+      2;
 
     ensureSpace(boxH + 2);
     doc.setFillColor(248, 250, 252);
@@ -284,9 +305,10 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
 
     py += lineH;
     doc.setFont(fontName, 'bold');
-    doc.setFontSize(fsBase + 0.6);
+    doc.setFontSize(fsBase + 0.4);
     doc.setTextColor(15, 23, 42);
-    doc.text(partyName, margin + 2.5, py);
+    doc.text(partyTitleLines, margin + 2.5, py);
+    py += (partyTitleLines.length - 1) * lineH;
 
     doc.setFont(fontName, 'normal');
     doc.setFontSize(fsSmall);
@@ -317,6 +339,78 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     showUnit?: boolean;
   }) => {
     if (!isGoodsDoc) {
+      if (isReceipt && receiptEntries.length > 0) {
+        const rCols = [
+          { label: '#', w: cw * 0.07, align: 'center' as const },
+          { label: 'Customer Name', w: cw * 0.37, align: 'left' as const },
+          { label: 'Available Due', w: cw * 0.18, align: 'right' as const },
+          { label: 'Remark', w: cw * 0.18, align: 'left' as const },
+          { label: 'Received (Rs.)', w: cw * 0.2, align: 'right' as const },
+        ];
+        const headerH = isA5 ? 5.2 : 6;
+        ensureSpace(headerH + 6);
+
+        const drawRecHeader = () => {
+          doc.setFillColor(241, 245, 249);
+          doc.setDrawColor(148, 163, 184);
+          doc.setLineWidth(0.25);
+          doc.rect(margin, y, cw, headerH, 'FD');
+          doc.setFont(fontName, 'bold');
+          doc.setFontSize(fsSmall - 0.3);
+          doc.setTextColor(30, 41, 59);
+          let cx = margin;
+          for (const c of rCols) {
+            const tx =
+              c.align === 'center' ? cx + c.w / 2 : c.align === 'right' ? cx + c.w - 1.2 : cx + 1.2;
+            doc.text(c.label, tx, y + headerH - 1.6, { align: c.align });
+            cx += c.w;
+          }
+          y += headerH;
+        };
+
+        drawRecHeader();
+
+        for (let idx = 0; idx < receiptEntries.length; idx++) {
+          const entry = receiptEntries[idx];
+          const nameLines = doc.splitTextToSize(entry.partyName || '', rCols[1].w - 2.4) as string[];
+          const rowH = Math.max(isA5 ? 4.8 : 5.4, nameLines.length * (lineH - 0.2) + 1.4);
+          if (y + rowH > maxY - 4) {
+            doc.addPage();
+            y = margin;
+            drawRecHeader();
+          }
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.2);
+          doc.rect(margin, y, cw, rowH, 'S');
+          doc.setFont(fontName, 'normal');
+          doc.setFontSize(fsSmall);
+          doc.setTextColor(15, 23, 42);
+
+          let cx = margin;
+          doc.text(String(idx + 1), cx + rCols[0].w / 2, y + 3.4, { align: 'center' });
+          cx += rCols[0].w;
+
+          doc.setFont(fontName, 'bold');
+          doc.text(nameLines, cx + 1.2, y + 3.4);
+          doc.setFont(fontName, 'normal');
+          cx += rCols[1].w;
+
+          const dueStr =
+            entry.availableDue !== undefined ? formatRs(entry.availableDue) : '-';
+          doc.text(dueStr, cx + rCols[2].w - 1.2, y + 3.4, { align: 'right' });
+          cx += rCols[2].w;
+
+          const noteLine = (doc.splitTextToSize(entry.notes || '-', rCols[3].w - 2) as string[])[0] || '-';
+          doc.text(noteLine, cx + 1.2, y + 3.4);
+          cx += rCols[3].w;
+
+          doc.setFont(fontName, 'bold');
+          doc.text(formatRs(entry.amount), cx + rCols[4].w - 1.2, y + 3.4, { align: 'right' });
+          y += rowH;
+        }
+        y += 2;
+      }
+
       const boxH = 16;
       ensureSpace(boxH + 2);
       doc.setFillColor(248, 250, 252);
@@ -332,7 +426,11 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
       }
       doc.setFont(fontName, 'bold');
       doc.setFontSize(fsBase + 1.5);
-      doc.text(`Settlement Amount: ${formatRs(voucher.grandTotal)}`, margin + 3, y + 12.2);
+      doc.text(
+        `${isReceipt ? 'Total Received' : 'Settlement Amount'}: ${formatRs(voucher.grandTotal)}`,
+        margin + 3,
+        y + 12.2
+      );
       y += boxH + 3;
       return;
     }
@@ -453,6 +551,10 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     if (voucher.cgstTotal > 0) taxRows.push(['CGST:', formatRs(voucher.cgstTotal)]);
     if (voucher.sgstTotal > 0) taxRows.push(['SGST:', formatRs(voucher.sgstTotal)]);
     if (voucher.igstTotal > 0) taxRows.push(['IGST:', formatRs(voucher.igstTotal)]);
+    if (Math.abs(voucher.roundOff || 0) > 0) {
+      const rOff = voucher.roundOff!;
+      taxRows.push(['Round Off:', `${rOff > 0 ? '+' : '-'}${formatRs(Math.abs(rOff))}`]);
+    }
 
     const totalsBoxH = taxRows.length * (lineH + 0.3) + 7.5;
     const qrSize = isA5 ? 15 : 18;
@@ -665,7 +767,9 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
           doc.setFontSize(fsSmall - 0.3);
           doc.setTextColor(30, 41, 59);
           doc.text(
-            `Doc: ${voucher.voucherNo}   |   Date: ${voucher.date}   |   Mode: ${voucher.paymentMode}   |   State: ${partyStateCode}`,
+            `${voucher.voucherNo ? `Doc: ${voucher.voucherNo}   |   ` : ''}Date: ${voucher.date}   |   Mode: ${voucher.paymentMode}${
+              partyStateCode ? `   |   State: ${partyStateCode}` : ''
+            }`,
             margin + 2.5,
             y + 4.8
           );
@@ -786,7 +890,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
       renderCustomBlock(blk);
     }
   } else {
-    // Standard Crisp Single-Page Invoice Layout
+    // Standard Crisp Invoice Layout
     drawHeader();
     drawPartyBox();
     drawItemsTable();
@@ -797,7 +901,25 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     drawFooter();
   }
 
-  const safeVoucherNo = (voucher.voucherNo || 'Invoice').replace(/[^a-zA-Z0-9_-]+/g, '_');
+  // Draw subtle A5 half-page cut guide at exact midpoint (148.5mm) of the A4 Xerox sheet
+  if (isA5) {
+    const cutY = 148.5;
+    doc.setPage(doc.getNumberOfPages());
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.25);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.line(margin, cutY, pageW - margin, cutY);
+    doc.setLineDashPattern([], 0);
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text('A5 Half-Page (Top Half of A4 Xerox)', margin, cutY - 1.2);
+    doc.text('Cut / Fold Here', pageW - margin, cutY - 1.2, { align: 'right' });
+  }
+
+  const safeVoucherNo = (
+    voucher.voucherNo || (voucher.type === 'RECEIPT' ? `Receipt_${voucher.date}` : 'Invoice')
+  ).replace(/[^a-zA-Z0-9_-]+/g, '_');
   const safeParty = (partyName || '').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 24);
   const fileName = safeParty ? `${safeVoucherNo}_${safeParty}.pdf` : `${safeVoucherNo}.pdf`;
   doc.save(fileName);

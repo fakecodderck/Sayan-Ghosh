@@ -45,15 +45,23 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
   const padY = template.density === 'compact' ? 'py-1' : 'py-1.5';
   const blockSpacing = template.density === 'compact' ? 'space-y-2 print:space-y-1.5' : 'space-y-3 print:space-y-1.5';
 
-  const buyerName =
-    party?.name ||
-    voucher.guestDetails?.name ||
-    voucher.partyName ||
-    (voucher.type === 'PAYMENT' ? 'Expense Payment' : 'Walk-in / Cash Customer');
-  const buyerAddress = party?.address || voucher.guestDetails?.address || '';
-  const buyerGstin = party?.gstin || voucher.guestDetails?.gstin || '';
-  const buyerPhone = party?.phone || voucher.guestDetails?.phone || '';
-  const buyerStateCode = party?.stateCode || voucher.guestDetails?.stateCode || settings.stateCode;
+  const isReceipt = voucher.type === 'RECEIPT';
+  const receiptEntries = isReceipt ? voucher.receiptEntries || [] : [];
+  const hasMultiCustomerReceipt = isReceipt && receiptEntries.length > 1;
+
+  const buyerName = hasMultiCustomerReceipt
+    ? `${receiptEntries.length} Customers (${receiptEntries.map(r => r.partyName).join(', ')})`
+    : party?.name ||
+      (receiptEntries.length === 1 ? receiptEntries[0].partyName : '') ||
+      voucher.guestDetails?.name ||
+      voucher.partyName ||
+      (voucher.type === 'PAYMENT' ? 'Expense Payment' : 'Walk-in / Cash Customer');
+  const buyerAddress = hasMultiCustomerReceipt ? '' : party?.address || voucher.guestDetails?.address || '';
+  const buyerGstin = hasMultiCustomerReceipt ? '' : party?.gstin || voucher.guestDetails?.gstin || '';
+  const buyerPhone = hasMultiCustomerReceipt ? '' : party?.phone || voucher.guestDetails?.phone || '';
+  const buyerStateCode = hasMultiCustomerReceipt
+    ? settings.stateCode
+    : party?.stateCode || voucher.guestDetails?.stateCode || settings.stateCode;
 
   const isGoodsDoc = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(voucher.type);
 
@@ -98,7 +106,7 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
         settings.upiId,
         settings.name,
         voucher.grandTotal,
-        `Inv ${voucher.voucherNo}`
+        voucher.voucherNo ? `Inv ${voucher.voucherNo}` : 'Receipt'
       )
     : '';
 
@@ -174,11 +182,17 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
             } ${radiusClass} text-[10px]`}
           >
             <div>
-              <span className="text-slate-500 uppercase font-semibold block text-[9px]">Document No</span>
-              <span className="font-mono font-bold text-slate-900">{voucher.voucherNo}</span>
+              <span className="text-slate-500 uppercase font-semibold block text-[9px]">
+                {voucher.voucherNo ? 'Document No' : 'Document Type'}
+              </span>
+              <span className="font-mono font-bold text-slate-900">
+                {voucher.voucherNo || (isReceipt ? 'Payment Receipt' : '—')}
+              </span>
             </div>
             <div>
-              <span className="text-slate-500 uppercase font-semibold block text-[9px]">Invoice Date</span>
+              <span className="text-slate-500 uppercase font-semibold block text-[9px]">
+                {isReceipt ? 'Receipt Date' : 'Invoice Date'}
+              </span>
               <span className="font-mono font-bold text-slate-900">{voucher.date}</span>
             </div>
             <div>
@@ -206,7 +220,13 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
           >
             <p className="uppercase font-bold text-slate-500 tracking-wider text-[9px]">
               {block.customHeading ||
-                (voucher.type === 'PURCHASE' ? 'Supplier Details' : 'Billed To (Customer)')}
+                (voucher.type === 'PURCHASE'
+                  ? 'Supplier Details'
+                  : isReceipt
+                  ? hasMultiCustomerReceipt
+                    ? `Received From (${receiptEntries.length} Customers)`
+                    : 'Received From (Customer)'
+                  : 'Billed To (Customer)')}
               {voucher.customerMode === 'guest' && ' · Guest Walk-In'}
             </p>
             <p className="font-bold text-slate-950 text-xs sm:text-sm mt-0.5">{buyerName}</p>
@@ -249,10 +269,52 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
 
       case 'items_table': {
         if (!isGoodsDoc) {
+          if (isReceipt && receiptEntries.length > 0) {
+            return (
+              <div className={`border border-slate-300 ${radiusClass} overflow-x-auto`}>
+                <table className="w-full text-left border-collapse print-table text-[10px]">
+                  <thead>
+                    <tr
+                      className="border-b border-slate-300 font-bold text-slate-900 uppercase"
+                      style={{ backgroundColor: `${accent}12` }}
+                    >
+                      <th className={`${padY} px-2 w-8 text-center border-r border-slate-200`}>#</th>
+                      <th className={`${padY} px-2 border-r border-slate-200`}>Customer Name</th>
+                      <th className={`${padY} px-2 w-28 text-right border-r border-slate-200`}>Available Due</th>
+                      <th className={`${padY} px-2 border-r border-slate-200`}>Remark</th>
+                      <th className={`${padY} px-2 w-28 text-right`}>Amount Received (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {receiptEntries.map((entry, idx) => (
+                      <tr key={`${entry.partyId}_${idx}`}>
+                        <td className={`${padY} px-2 text-center text-slate-500 border-r border-slate-200`}>
+                          {idx + 1}
+                        </td>
+                        <td className={`${padY} px-2 border-r border-slate-200 font-semibold text-slate-900`}>
+                          {entry.partyName}
+                        </td>
+                        <td className={`${padY} px-2 text-right font-mono text-slate-600 border-r border-slate-200`}>
+                          {entry.availableDue !== undefined ? formatINR(entry.availableDue) : '—'}
+                        </td>
+                        <td className={`${padY} px-2 text-slate-600 border-r border-slate-200`}>
+                          {entry.notes || '—'}
+                        </td>
+                        <td className={`${padY} px-2 text-right font-mono font-bold text-slate-950`}>
+                          {formatINR(entry.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+
           return (
             <div className={`border border-slate-300 ${radiusClass} p-3 bg-slate-50/60 text-xs`}>
               <div className="flex justify-between font-bold">
-                <span>Settlement Amount</span>
+                <span>{isReceipt ? 'Total Amount Received' : 'Settlement Amount'}</span>
                 <span className="font-mono">{formatINR(voucher.grandTotal)}</span>
               </div>
             </div>
@@ -358,6 +420,16 @@ export const CustomInvoiceRenderer: React.FC<CustomInvoiceRendererProps> = ({
                 <div className="flex justify-between">
                   <span>IGST:</span>
                   <span>{formatINR(voucher.igstTotal)}</span>
+                </div>
+              )}
+              {Math.abs(voucher.roundOff || 0) > 0 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Round Off:</span>
+                  <span>
+                    {(voucher.roundOff || 0) > 0
+                      ? `+${formatINR(voucher.roundOff!)}`
+                      : `-${formatINR(Math.abs(voucher.roundOff!))}`}
+                  </span>
                 </div>
               )}
               <div

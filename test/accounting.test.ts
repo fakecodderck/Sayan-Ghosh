@@ -386,4 +386,124 @@ let testsPassed = 0;
   console.log('✅ Test 7 Passed: GSTR-1 statutory tax summary & B2B/B2C segregation verified');
 })();
 
+// TEST 8: Multi-Customer Receipt (No Invoice No) Double-Entry & Reversal
+(() => {
+  const chart = ensureSystemLedgers([
+    { id: 'c_01', name: 'Customer A', group: 'Sundry Debtors', openingBalance: 5000, currentBalance: 5000 },
+    { id: 'c_02', name: 'Customer B', group: 'Sundry Debtors', openingBalance: 3200, currentBalance: 3200 },
+  ]);
+
+  const multiReceipt: TransactionVoucher = {
+    id: 'v_multi_rec',
+    voucherNo: '',
+    date: '2026-11-23',
+    type: 'RECEIPT',
+    partyName: 'Customer A, Customer B',
+    isGstBill: false,
+    paymentMode: 'UPI',
+    subtotal: 4200,
+    cgstTotal: 0,
+    sgstTotal: 0,
+    igstTotal: 0,
+    grandTotal: 4200,
+    items: [],
+    receiptEntries: [
+      { partyId: 'c_01', partyName: 'Customer A', amount: 2500, availableDue: 5000 },
+      { partyId: 'c_02', partyName: 'Customer B', amount: 1700, availableDue: 3200 },
+    ],
+  };
+
+  const journal = generateJournalEntries(multiReceipt, chart);
+  const totalDebits = journal.reduce((s, j) => s + j.debit, 0);
+  const totalCredits = journal.reduce((s, j) => s + j.credit, 0);
+  assertEquals(totalDebits, 4200, 'Multi-customer receipt debits must equal total received');
+  assertEquals(totalCredits, 4200, 'Multi-customer receipt credits must equal total received');
+  assertEquals(journal.length, 3, 'Journal must have 1 Bank/UPI debit and 2 customer credits');
+
+  const applyDeltas = computeLedgerDeltas(journal, false);
+  assertEquals(applyDeltas.get('ledger_bank_primary'), 4200, 'Bank/UPI ledger should increase by 4200');
+  assertEquals(applyDeltas.get('c_01'), -2500, 'Customer A due should decrease by 2500');
+  assertEquals(applyDeltas.get('c_02'), -1700, 'Customer B due should decrease by 1700');
+
+  const reverseDeltas = computeLedgerDeltas(journal, true);
+  assertEquals((applyDeltas.get('ledger_bank_primary') || 0) + (reverseDeltas.get('ledger_bank_primary') || 0), 0, 'Net bank delta on reversal must be 0');
+  assertEquals((applyDeltas.get('c_01') || 0) + (reverseDeltas.get('c_01') || 0), 0, 'Net Customer A delta on reversal must be 0');
+  assertEquals((applyDeltas.get('c_02') || 0) + (reverseDeltas.get('c_02') || 0), 0, 'Net Customer B delta on reversal must be 0');
+
+  testsPassed++;
+  console.log('✅ Test 8 Passed: Multi-customer receipt double-entry, per-customer balance delta, and reversal verified');
+})();
+
+// TEST 9: Sale Invoice Round-Off (+ve and -ve) Double-Entry & Reversal
+(() => {
+  const chart = ensureSystemLedgers([
+    { id: 'c_01', name: 'Customer A', group: 'Sundry Debtors', openingBalance: 0, currentBalance: 0 },
+  ]);
+
+  // Positive Round-Off: 1180.60 -> +0.40 = 1181.00
+  const salePosRound: TransactionVoucher = {
+    id: 'v_sale_round_pos',
+    voucherNo: 'INV/2026/001',
+    date: '2026-11-23',
+    type: 'SALE',
+    partyId: 'c_01',
+    partyName: 'Customer A',
+    isGstBill: true,
+    paymentMode: 'CREDIT',
+    subtotal: 1000.5,
+    cgstTotal: 90.05,
+    sgstTotal: 90.05,
+    igstTotal: 0,
+    roundOff: 0.4,
+    grandTotal: 1181,
+    items: [],
+  };
+
+  const posJournal = generateJournalEntries(salePosRound, chart);
+  const posDebits = Number(posJournal.reduce((s, j) => s + j.debit, 0).toFixed(2));
+  const posCredits = Number(posJournal.reduce((s, j) => s + j.credit, 0).toFixed(2));
+  assertEquals(posDebits, 1181, 'Positive round-off debits must equal 1181');
+  assertEquals(posCredits, 1181, 'Positive round-off credits must equal 1181');
+
+  const posDeltas = computeLedgerDeltas(posJournal, false);
+  assertEquals(posDeltas.get('c_01'), 1181, 'Customer A balance should increase by 1181');
+  assertEquals(posDeltas.get('ledger_sys_roundoff'), -0.4, 'Round Off account credit (+0.40 gain) yields -0.40 delta');
+
+  const posReverse = computeLedgerDeltas(posJournal, true);
+  assertEquals((posDeltas.get('c_01') || 0) + (posReverse.get('c_01') || 0), 0, 'Net Customer A delta on reversal must be 0');
+  assertEquals((posDeltas.get('ledger_sys_roundoff') || 0) + (posReverse.get('ledger_sys_roundoff') || 0), 0, 'Net Round Off delta on reversal must be 0');
+
+  // Negative Round-Off: 1180.40 -> -0.40 = 1180.00
+  const saleNegRound: TransactionVoucher = {
+    id: 'v_sale_round_neg',
+    voucherNo: 'INV/2026/002',
+    date: '2026-11-23',
+    type: 'SALE',
+    partyId: 'c_01',
+    partyName: 'Customer A',
+    isGstBill: true,
+    paymentMode: 'CREDIT',
+    subtotal: 1000.34,
+    cgstTotal: 90.03,
+    sgstTotal: 90.03,
+    igstTotal: 0,
+    roundOff: -0.4,
+    grandTotal: 1180,
+    items: [],
+  };
+
+  const negJournal = generateJournalEntries(saleNegRound, chart);
+  const negDebits = Number(negJournal.reduce((s, j) => s + j.debit, 0).toFixed(2));
+  const negCredits = Number(negJournal.reduce((s, j) => s + j.credit, 0).toFixed(2));
+  assertEquals(negDebits, 1180.4, 'Negative round-off debits must equal 1180.40');
+  assertEquals(negCredits, 1180.4, 'Negative round-off credits must equal 1180.40');
+
+  const negDeltas = computeLedgerDeltas(negJournal, false);
+  assertEquals(negDeltas.get('c_01'), 1180, 'Customer A balance should increase by 1180');
+  assertEquals(negDeltas.get('ledger_sys_roundoff'), 0.4, 'Round Off account debit (-0.40 expense) yields +0.40 delta');
+
+  testsPassed++;
+  console.log('✅ Test 9 Passed: Sale Invoice positive & negative Round Off double-entry and reversal verified');
+})();
+
 console.log(`\n🎉 ALL ${testsPassed} UNIT TESTS PASSED SUCCESSFULLY!`);

@@ -99,6 +99,14 @@ export interface JournalLineItem {
   notes?: string;
 }
 
+export interface ReceiptCustomerEntry {
+  partyId: string;
+  partyName: string;
+  amount: number;
+  availableDue?: number;
+  notes?: string;
+}
+
 export interface TransactionVoucher {
   id: string;
   companyId?: string;
@@ -117,8 +125,10 @@ export interface TransactionVoucher {
   cgstTotal: number;
   sgstTotal: number;
   igstTotal: number;
+  roundOff?: number;
   grandTotal: number;
   items: VoucherLineItem[];
+  receiptEntries?: ReceiptCustomerEntry[];
   journalEntries?: JournalLineItem[];
   notes?: string;
   createdBy?: string;

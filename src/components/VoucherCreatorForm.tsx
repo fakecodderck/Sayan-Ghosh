@@ -53,6 +53,29 @@ const getNextVoucherPrefix = (t: VoucherType, isGst: boolean) => {
   return 'DN';
 };
 
+interface ReceiptCustomerRow {
+  rowKey: string;
+  partyId: string;
+  partyQuery: string;
+  amount: number;
+  notes: string;
+}
+
+const createReceiptRowKey = () =>
+  `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+const buildMultiCustomerSummaryName = (
+  entries: { partyName: string }[]
+): string => {
+  if (entries.length === 0) return 'Customer Receipt';
+  if (entries.length === 1) return entries[0].partyName.slice(0, 120);
+  const joined = entries.map(e => e.partyName).join(', ');
+  if (joined.length <= 120) return joined;
+  const prefix = `${entries.length} Customers: `;
+  const remaining = 120 - prefix.length - 3;
+  return `${prefix}${joined.slice(0, Math.max(10, remaining))}...`;
+};
+
 const getInitialCustomerMode = (voucher?: TransactionVoucher): CustomerMode => {
   if (!voucher) return 'existing';
   if (voucher.customerMode === 'guest' || (!voucher.partyId && voucher.guestDetails)) {
@@ -81,8 +104,35 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   const [isGstInclusive, setIsGstInclusive] = useState<boolean>(
     editingVoucher ? Boolean(editingVoucher.isGstInclusive) : false
   );
+  const [roundOffMode, setRoundOffMode] = useState<'auto' | 'manual' | 'off'>(() => {
+    if (editingVoucher && editingVoucher.type === 'SALE') {
+      const savedRound = Number(editingVoucher.roundOff || 0);
+      if (Math.abs(savedRound) > 0) {
+        const initRaw = Number(
+          (
+            (editingVoucher.subtotal || 0) +
+            (editingVoucher.cgstTotal || 0) +
+            (editingVoucher.sgstTotal || 0) +
+            (editingVoucher.igstTotal || 0)
+          ).toFixed(2)
+        );
+        const autoDiff = Number((Math.round(initRaw) - initRaw).toFixed(2));
+        return Math.abs(autoDiff - savedRound) < 0.01 ? 'auto' : 'manual';
+      }
+      return 'off';
+    }
+    return 'auto';
+  });
+  const [manualRoundOffInput, setManualRoundOffInput] = useState<string>(() => {
+    if (editingVoucher && editingVoucher.type === 'SALE' && editingVoucher.roundOff) {
+      return Number(editingVoucher.roundOff).toFixed(2);
+    }
+    return '0';
+  });
   const [voucherNo, setVoucherNo] = useState<string>(() => {
+    if (editingVoucher?.type === 'RECEIPT') return editingVoucher.voucherNo || '';
     if (editingVoucher?.voucherNo) return editingVoucher.voucherNo;
+    if (initialType === 'RECEIPT') return '';
     const prefix = getNextVoucherPrefix(initialType, initialIsGstBill);
     return `${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`;
   });
@@ -103,6 +153,57 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       return ledgers.find(l => l.id === targetId)?.name || editingVoucher?.partyName || '';
     }
     return '';
+  });
+
+  // Multi-customer receipt rows state
+  const [receiptRows, setReceiptRows] = useState<ReceiptCustomerRow[]>(() => {
+    if (editingVoucher?.type === 'RECEIPT') {
+      if (editingVoucher.receiptEntries && editingVoucher.receiptEntries.length > 0) {
+        return editingVoucher.receiptEntries.map(entry => ({
+          rowKey: createReceiptRowKey(),
+          partyId: entry.partyId || '',
+          partyQuery:
+            ledgers.find(l => l.id === entry.partyId)?.name || entry.partyName || '',
+          amount: Number(entry.amount) || 0,
+          notes: entry.notes || '',
+        }));
+      }
+      if (editingVoucher.partyId || editingVoucher.partyName) {
+        return [
+          {
+            rowKey: createReceiptRowKey(),
+            partyId: editingVoucher.partyId || '',
+            partyQuery:
+              ledgers.find(l => l.id === editingVoucher.partyId)?.name ||
+              editingVoucher.partyName ||
+              '',
+            amount: Number(editingVoucher.grandTotal) || 0,
+            notes: '',
+          },
+        ];
+      }
+    }
+    if (initialType === 'RECEIPT' && initialPartyId) {
+      const initialLedger = ledgers.find(l => l.id === initialPartyId);
+      return [
+        {
+          rowKey: createReceiptRowKey(),
+          partyId: initialPartyId,
+          partyQuery: initialLedger?.name || '',
+          amount: 0,
+          notes: '',
+        },
+      ];
+    }
+    return [
+      {
+        rowKey: createReceiptRowKey(),
+        partyId: '',
+        partyQuery: '',
+        amount: 0,
+        notes: '',
+      },
+    ];
   });
 
   // New Customer inline creation fields
@@ -127,9 +228,13 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     editingVoucher?.guestDetails?.stateCode || settings.stateCode || '19'
   );
 
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>(
-    editingVoucher?.paymentMode || 'CREDIT'
-  );
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(() => {
+    const baseMode = editingVoucher?.paymentMode || (initialType === 'RECEIPT' ? 'CASH' : 'CREDIT');
+    if ((editingVoucher?.type ?? initialType) === 'RECEIPT' && baseMode === 'CREDIT') {
+      return 'CASH';
+    }
+    return baseMode;
+  });
   const [referenceNo, setReferenceNo] = useState<string>(editingVoucher?.referenceNo || '');
   const [notes, setNotes] = useState<string>(editingVoucher?.notes || '');
   const [directAmount, setDirectAmount] = useState<number>(() => {
@@ -147,6 +252,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isGoodsTransaction = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'DEBIT_NOTE'].includes(type);
+  const isReceiptMode = type === 'RECEIPT';
   const supportsCustomerModes = type === 'SALE' || type === 'CREDIT_NOTE';
 
   const buildInitialItem = (overrideGst: boolean = isGstBill): VoucherLineItem => {
@@ -183,6 +289,24 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       setPartyQuery(found.name);
     }
   }, [partyId, ledgers]);
+
+  // Sync receipt row names when async ledgers arrive
+  useEffect(() => {
+    setReceiptRows(prev => {
+      let changed = false;
+      const next = prev.map(row => {
+        if (row.partyId && !row.partyQuery) {
+          const found = ledgers.find(l => l.id === row.partyId);
+          if (found) {
+            changed = true;
+            return { ...row, partyQuery: found.name };
+          }
+        }
+        return row;
+      });
+      return changed ? next : prev;
+    });
+  }, [ledgers]);
 
   // Sync default state codes when async settings arrive (preserve edited guest state code)
   useEffect(() => {
@@ -300,6 +424,70 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
   const handleClearParty = () => {
     setPartyId('');
     setPartyQuery('');
+  };
+
+  // Multi-customer receipt row handlers
+  const handleReceiptPartyQueryChange = (rowKey: string, val: string) => {
+    setReceiptRows(prev =>
+      prev.map(row => {
+        if (row.rowKey !== rowKey) return row;
+        let nextPartyId = row.partyId;
+        if (row.partyId) {
+          const current = ledgers.find(l => l.id === row.partyId);
+          if (!current || current.name !== val) {
+            nextPartyId = '';
+          }
+        }
+        return { ...row, partyQuery: val, partyId: nextPartyId };
+      })
+    );
+  };
+
+  const handleSelectReceiptParty = (rowKey: string, ledger: LedgerAccount) => {
+    setReceiptRows(prev =>
+      prev.map(row =>
+        row.rowKey === rowKey
+          ? { ...row, partyId: ledger.id, partyQuery: ledger.name }
+          : row
+      )
+    );
+  };
+
+  const handleClearReceiptParty = (rowKey: string) => {
+    setReceiptRows(prev =>
+      prev.map(row =>
+        row.rowKey === rowKey
+          ? { ...row, partyId: '', partyQuery: '' }
+          : row
+      )
+    );
+  };
+
+  const handleReceiptRowFieldChange = (
+    rowKey: string,
+    field: 'amount' | 'notes',
+    val: number | string
+  ) => {
+    setReceiptRows(prev =>
+      prev.map(row => (row.rowKey === rowKey ? { ...row, [field]: val } : row))
+    );
+  };
+
+  const addReceiptRow = () => {
+    setReceiptRows(prev => [
+      ...prev,
+      {
+        rowKey: createReceiptRowKey(),
+        partyId: '',
+        partyQuery: '',
+        amount: 0,
+        notes: '',
+      },
+    ]);
+  };
+
+  const removeReceiptRow = (rowKey: string) => {
+    setReceiptRows(prev => (prev.length <= 1 ? prev : prev.filter(r => r.rowKey !== rowKey)));
   };
 
   const filterInventoryItem = (inv: InventoryItem, q: string) =>
@@ -448,8 +636,29 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
+  const receiptTotal = Number(
+    receiptRows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0).toFixed(2)
+  );
+
+  const selectedReceiptPartiesCount = new Set(
+    receiptRows.filter(r => Boolean(r.partyId)).map(r => r.partyId)
+  ).size;
+
+  const totalSelectedReceiptDue = Number(
+    Array.from(
+      new Set(receiptRows.filter(r => Boolean(r.partyId)).map(r => r.partyId))
+    )
+      .reduce((acc, id) => {
+        const ledger = getLedgerById(id);
+        return acc + (ledger && ledger.currentBalance > 0 ? ledger.currentBalance : 0);
+      }, 0)
+      .toFixed(2)
+  );
+
   const subtotal = isGoodsTransaction
     ? Number(items.reduce((acc, it) => acc + it.taxableAmount, 0).toFixed(2))
+    : isReceiptMode
+    ? receiptTotal
     : directAmount;
 
   const cgstTotal = isGoodsTransaction
@@ -464,13 +673,151 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
     ? Number(items.reduce((acc, it) => acc + it.igst, 0).toFixed(2))
     : 0;
 
-  const grandTotal = isGoodsTransaction
+  const isSaleMode = type === 'SALE';
+  const rawGoodsTotal = isGoodsTransaction
     ? Number((subtotal + cgstTotal + sgstTotal + igstTotal).toFixed(2))
+    : 0;
+  const parsedManualRoundOff = Number.isFinite(parseFloat(manualRoundOffInput))
+    ? parseFloat(manualRoundOffInput)
+    : 0;
+  const appliedRoundOff = isSaleMode
+    ? roundOffMode === 'auto'
+      ? Number((Math.round(rawGoodsTotal) - rawGoodsTotal).toFixed(2))
+      : roundOffMode === 'manual'
+      ? Number(Math.max(-1000, Math.min(1000, parsedManualRoundOff)).toFixed(2))
+      : 0
+    : 0;
+
+  const grandTotal = isGoodsTransaction
+    ? Number((rawGoodsTotal + appliedRoundOff).toFixed(2))
+    : isReceiptMode
+    ? receiptTotal
     : directAmount;
 
   const submitVoucher = async (shouldPrint: boolean) => {
     setFormError(null);
     setSavedSuccessMsg(null);
+
+    if (isReceiptMode) {
+      if (receiptRows.length === 0) {
+        setFormError('Please add at least one customer to record a receipt.');
+        return;
+      }
+
+      const resolvedEntries = receiptRows.map(row => {
+        let resolvedId = row.partyId;
+        let resolvedLedger = resolvedId ? ledgers.find(l => l.id === resolvedId) : undefined;
+        if (!resolvedLedger && row.partyQuery.trim()) {
+          const exact = eligibleParties.find(
+            l => l.name.toLowerCase() === row.partyQuery.trim().toLowerCase()
+          );
+          if (exact) {
+            resolvedId = exact.id;
+            resolvedLedger = exact;
+          }
+        }
+        return {
+          row,
+          resolvedId,
+          resolvedLedger,
+        };
+      });
+
+      if (resolvedEntries.some(e => !e.resolvedId || !e.resolvedLedger)) {
+        setFormError('Please select a customer from suggestions for every receipt row.');
+        return;
+      }
+
+      if (resolvedEntries.some(e => (Number(e.row.amount) || 0) <= 0)) {
+        setFormError('Please enter a received amount greater than ₹0 for every customer.');
+        return;
+      }
+
+      const effectivePaymentMode: PaymentMode = paymentMode === 'CREDIT' ? 'CASH' : paymentMode;
+      const receiptEntriesPayload = resolvedEntries.map(e => ({
+        partyId: e.resolvedId,
+        partyName: e.resolvedLedger!.name.slice(0, 120),
+        amount: Number((Number(e.row.amount) || 0).toFixed(2)),
+        availableDue: Number((e.resolvedLedger!.currentBalance || 0).toFixed(2)),
+        notes: e.row.notes.trim() ? e.row.notes.trim().slice(0, 200) : undefined,
+      }));
+
+      const totalReceived = Number(
+        receiptEntriesPayload.reduce((sum, entry) => sum + entry.amount, 0).toFixed(2)
+      );
+
+      setIsSubmitting(true);
+      try {
+        const voucherPayload: Omit<TransactionVoucher, 'id'> = {
+          voucherNo: '',
+          date,
+          type: 'RECEIPT',
+          partyId:
+            receiptEntriesPayload.length === 1 ? receiptEntriesPayload[0].partyId : undefined,
+          partyName: buildMultiCustomerSummaryName(receiptEntriesPayload),
+          customerMode: 'existing',
+          isGstBill: false,
+          isGstInclusive: false,
+          paymentMode: effectivePaymentMode,
+          referenceNo: referenceNo.trim() ? referenceNo.trim().slice(0, 80) : undefined,
+          subtotal: totalReceived,
+          cgstTotal: 0,
+          sgstTotal: 0,
+          igstTotal: 0,
+          grandTotal: totalReceived,
+          items: [],
+          receiptEntries: receiptEntriesPayload,
+          notes: notes.trim() ? notes.trim().slice(0, 1000) : undefined,
+        };
+
+        if (editingVoucher) {
+          const updatedVoucher = await updateVoucher({
+            ...editingVoucher,
+            ...voucherPayload,
+            id: editingVoucher.id,
+            companyId: editingVoucher.companyId,
+            createdAt: editingVoucher.createdAt,
+          });
+          setLastSavedVoucher(updatedVoucher);
+          setSavedSuccessMsg(
+            `Updated Receipt (${receiptEntriesPayload.length} ${
+              receiptEntriesPayload.length === 1 ? 'Customer' : 'Customers'
+            } · ${formatINR(updatedVoucher.grandTotal)})`
+          );
+          if (onSuccess) onSuccess(updatedVoucher, shouldPrint);
+        } else {
+          const createdId = await addVoucher(voucherPayload);
+          const createdVoucher: TransactionVoucher = {
+            ...voucherPayload,
+            id: createdId,
+            createdAt: new Date().toISOString(),
+          };
+          setLastSavedVoucher(createdVoucher);
+          setSavedSuccessMsg(
+            `Saved Receipt (${receiptEntriesPayload.length} ${
+              receiptEntriesPayload.length === 1 ? 'Customer' : 'Customers'
+            } · ${formatINR(createdVoucher.grandTotal)})`
+          );
+          setReferenceNo('');
+          setNotes('');
+          setReceiptRows([
+            {
+              rowKey: createReceiptRowKey(),
+              partyId: '',
+              partyQuery: '',
+              amount: 0,
+              notes: '',
+            },
+          ]);
+          if (onSuccess) onSuccess(createdVoucher, shouldPrint);
+        }
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to save receipt');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     if (isGoodsTransaction) {
       if (items.length === 0) {
@@ -555,7 +902,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         date,
         type,
         partyId: resolvedPartyId,
-        partyName: resolvedPartyName,
+        partyName: resolvedPartyName ? resolvedPartyName.slice(0, 120) : undefined,
         customerMode: supportsCustomerModes
           ? customerMode === 'new'
             ? 'existing'
@@ -579,6 +926,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         cgstTotal,
         sgstTotal,
         igstTotal,
+        ...(isSaleMode ? { roundOff: appliedRoundOff } : {}),
         grandTotal,
         items: isGoodsTransaction ? items : [],
         notes: notes.trim() || undefined,
@@ -613,6 +961,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         setReferenceNo('');
         setNotes('');
         setDirectAmount(0);
+        setManualRoundOffInput('0');
         setItems([buildInitialItem(isGstBill)]);
         if (customerMode === 'new') {
           setCustomerMode('existing');
@@ -721,7 +1070,11 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
                 type="button"
                 onClick={() => {
                   setType(tab.key);
-                  if (!isEditMode) {
+                  setFormError(null);
+                  if (tab.key === 'RECEIPT') {
+                    if (paymentMode === 'CREDIT') setPaymentMode('CASH');
+                    if (!isEditMode) setVoucherNo('');
+                  } else if (!isEditMode) {
                     const prefix = getNextVoucherPrefix(tab.key, isGstBill);
                     setVoucherNo(`${prefix}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`);
                   }
@@ -824,37 +1177,82 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         </div>
       )}
 
-      {/* Invoice No & Date + Customer Mode Selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-            Invoice No *
-          </label>
-          <input
-            type="text"
-            required
-            value={voucherNo}
-            onChange={e => setVoucherNo(e.target.value)}
-            className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
-          />
-        </div>
+      {/* Top Metadata Row: Receipt shows Date + Payment Method + Ref (no Invoice No); Other types show Invoice No + Date */}
+      {isReceiptMode ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
+          <div>
+            <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Receipt Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
+            />
+          </div>
 
-        <div>
-          <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-            Invoice Date *
-          </label>
-          <input
-            type="date"
-            required
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
-          />
-        </div>
-      </div>
+          <div>
+            <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Payment Method *
+            </label>
+            <select
+              value={paymentMode === 'CREDIT' ? 'CASH' : paymentMode}
+              onChange={e => setPaymentMode(e.target.value as PaymentMode)}
+              className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-medium"
+            >
+              <option value="CASH">Cash</option>
+              <option value="UPI">UPI / QR Code</option>
+              <option value="BANK">Bank Transfer (NEFT/RTGS)</option>
+            </select>
+          </div>
 
-      {/* Customer Type / Party Selection */}
-      {supportsCustomerModes ? (
+          <div>
+            <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+              UTR / Cheque / Ref No
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. UTR1902838"
+              value={referenceNo}
+              onChange={e => setReferenceNo(e.target.value)}
+              className="w-full p-2.5 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Invoice No *
+            </label>
+            <input
+              type="text"
+              required
+              value={voucherNo}
+              onChange={e => setVoucherNo(e.target.value)}
+              className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Invoice Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-mono"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Customer Type / Party Selection (Skipped for Receipt since Receipt uses multi-customer table below) */}
+      {isReceiptMode ? null : supportsCustomerModes ? (
         <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <label className="font-semibold text-slate-800 dark:text-slate-200">
@@ -1199,7 +1597,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         </div>
       )}
 
-      {/* Line Items Table or Direct Settlement Input */}
+      {/* Line Items Table, Multi-Customer Receipt List, or Direct Settlement Input */}
       {isGoodsTransaction ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1384,6 +1782,210 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
             </table>
           </div>
         </div>
+      ) : isReceiptMode ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Customer Collections ({receiptRows.length} {receiptRows.length === 1 ? 'Row' : 'Rows'})
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Search and select one or more customers to view their available due and record amounts received
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addReceiptRow}
+              className="h-8 inline-flex items-center justify-center gap-1.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 rounded-lg transition-colors whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Customer</span>
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {receiptRows.map((row, idx) => {
+              const selectedCustomer = row.partyId ? getLedgerById(row.partyId) : undefined;
+              const availableDue = selectedCustomer ? selectedCustomer.currentBalance || 0 : 0;
+              const enteredAmount = Number(row.amount) || 0;
+              const remainingDue = Number((availableDue - enteredAmount).toFixed(2));
+
+              return (
+                <div
+                  key={row.rowKey}
+                  className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
+                    <div className="md:col-span-6 space-y-1.5">
+                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                        Customer #{idx + 1} *
+                      </label>
+                      <AutocompleteInput<LedgerAccount>
+                        value={row.partyQuery}
+                        onChange={val => handleReceiptPartyQueryChange(row.rowKey, val)}
+                        items={eligibleParties}
+                        filterItem={filterParty}
+                        rankItem={rankParty}
+                        getItemKey={l => l.id}
+                        onSelect={ledger => handleSelectReceiptParty(row.rowKey, ledger)}
+                        onClear={() => handleClearReceiptParty(row.rowKey)}
+                        isSelected={Boolean(selectedCustomer)}
+                        selectedTitle="Customer selected"
+                        showSearchIcon
+                        ariaLabel={`Search customer ${idx + 1}`}
+                        placeholder="Type customer name, phone, or GSTIN..."
+                        inputClassName="py-2 font-medium"
+                        renderItem={l => (
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                {l.name}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                {[l.phone, l.gstin ? `GSTIN: ${l.gstin}` : ''].filter(Boolean).join(' · ') || l.group}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 font-mono tabular-nums text-[11px]">
+                              <div className="text-slate-400 text-[10px]">
+                                {l.currentBalance > 0 ? 'Available Due' : 'Balance'}
+                              </div>
+                              <div
+                                className={`font-semibold ${
+                                  l.currentBalance > 0
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {formatINR(Math.abs(l.currentBalance))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        emptyState={
+                          <span className="text-slate-500 dark:text-slate-400">
+                            No matching customer for &ldquo;{row.partyQuery.trim()}&rdquo;
+                          </span>
+                        }
+                      />
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        Amount Received (₹) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="any"
+                          placeholder="0.00"
+                          value={row.amount || ''}
+                          onChange={e =>
+                            handleReceiptRowFieldChange(
+                              row.rowKey,
+                              'amount',
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-full pl-7 pr-3 py-2 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        Remark (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Note..."
+                        value={row.notes}
+                        onChange={e =>
+                          handleReceiptRowFieldChange(row.rowKey, 'notes', e.target.value)
+                        }
+                        className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
+                      />
+                    </div>
+
+                    <div className="md:col-span-1 flex md:flex-col items-end justify-end md:pt-5">
+                      <button
+                        type="button"
+                        onClick={() => removeReceiptRow(row.rowKey)}
+                        disabled={receiptRows.length <= 1}
+                        className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 disabled:opacity-30 transition-colors"
+                        title="Remove customer row"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Available Due Banner on Customer Selection */}
+                  {selectedCustomer && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-700/70 text-[11px]">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">
+                            Available Due:
+                          </span>
+                          <span
+                            className={`font-mono tabular-nums font-bold px-2 py-0.5 rounded-md ${
+                              availableDue > 0
+                                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                            }`}
+                          >
+                            {availableDue > 0
+                              ? formatINR(availableDue)
+                              : availableDue < 0
+                              ? `${formatINR(Math.abs(availableDue))} (Advance)`
+                              : '₹0.00 (Cleared)'}
+                          </span>
+                        </span>
+
+                        {enteredAmount > 0 && (
+                          <span className="text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                            Balance after receipt:{' '}
+                            <strong
+                              className={
+                                remainingDue > 0
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-emerald-600 dark:text-emerald-400'
+                              }
+                            >
+                              {remainingDue < 0
+                                ? `${formatINR(Math.abs(remainingDue))} Advance`
+                                : formatINR(remainingDue)}
+                            </strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {availableDue > 0 && enteredAmount !== availableDue && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleReceiptRowFieldChange(
+                              row.rowKey,
+                              'amount',
+                              Number(availableDue.toFixed(2))
+                            )
+                          }
+                          className="h-6 px-2 text-[11px] font-semibold theme-soft-badge rounded-md hover:opacity-90 transition-opacity whitespace-nowrap"
+                        >
+                          Fill Full Due ({formatINR(availableDue)})
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : (
         <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
@@ -1405,83 +2007,177 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
         </div>
       )}
 
-      {/* Payment Mode & Calculations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                Payment Method
-              </label>
-              <select
-                value={paymentMode}
-                onChange={e => setPaymentMode(e.target.value as PaymentMode)}
-                className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-              >
-                {customerMode !== 'guest' && <option value="CREDIT">Credit (On Account)</option>}
-                <option value="CASH">Cash</option>
-                <option value="UPI">UPI / QR Code</option>
-                <option value="BANK">Bank Transfer (NEFT/RTGS)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
-                UTR / Cheque / Ref No
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. UTR1902838"
-                value={referenceNo}
-                onChange={e => setReferenceNo(e.target.value)}
-                className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
-              />
-            </div>
-          </div>
-
+      {/* Bottom Section: For Receipt show Narration + Total; for others show Payment Mode & Totals */}
+      {isReceiptMode ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800 items-end">
           <div>
             <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
               Narration / Notes
             </label>
             <input
               type="text"
-              placeholder="Additional remarks or delivery notes..."
+              placeholder="Overall receipt remarks..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+              className="w-full p-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
             />
           </div>
-        </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono tabular-nums text-xs">
-          <div className="flex justify-between text-slate-600 dark:text-slate-400">
-            <span>Taxable Subtotal:</span>
-            <span className="font-semibold">{formatINR(subtotal)}</span>
-          </div>
-          {cgstTotal > 0 && (
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono tabular-nums text-xs">
             <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>CGST:</span>
-              <span>{formatINR(cgstTotal)}</span>
+              <span>Customers Selected:</span>
+              <span className="font-semibold">
+                {selectedReceiptPartiesCount}{' '}
+                {selectedReceiptPartiesCount === 1 ? 'Customer' : 'Customers'}
+              </span>
             </div>
-          )}
-          {sgstTotal > 0 && (
             <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>SGST:</span>
-              <span>{formatINR(sgstTotal)}</span>
+              <span>Total Available Due:</span>
+              <span className="font-semibold">{formatINR(totalSelectedReceiptDue)}</span>
             </div>
-          )}
-          {igstTotal > 0 && (
-            <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>IGST:</span>
-              <span>{formatINR(igstTotal)}</span>
+            <div className="border-t border-slate-300 dark:border-slate-700 pt-2 flex justify-between text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+              <span>Total:</span>
+              <span className="theme-text">{formatINR(grandTotal)}</span>
             </div>
-          )}
-          <div className="border-t border-slate-300 dark:border-slate-700 pt-2 flex justify-between text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-            <span>Grand Total:</span>
-            <span className="theme-text">{formatINR(grandTotal)}</span>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={paymentMode}
+                  onChange={e => setPaymentMode(e.target.value as PaymentMode)}
+                  className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                >
+                  {customerMode !== 'guest' && <option value="CREDIT">Credit (On Account)</option>}
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI / QR Code</option>
+                  <option value="BANK">Bank Transfer (NEFT/RTGS)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  UTR / Cheque / Ref No
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. UTR1902838"
+                  value={referenceNo}
+                  onChange={e => setReferenceNo(e.target.value)}
+                  className="w-full p-2 font-mono border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1">
+                Narration / Notes
+              </label>
+              <input
+                type="text"
+                placeholder="Additional remarks or delivery notes..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800"
+              />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono tabular-nums text-xs">
+            <div className="flex justify-between text-slate-600 dark:text-slate-400">
+              <span>Taxable Subtotal:</span>
+              <span className="font-semibold">{formatINR(subtotal)}</span>
+            </div>
+            {cgstTotal > 0 && (
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>CGST:</span>
+                <span>{formatINR(cgstTotal)}</span>
+              </div>
+            )}
+            {sgstTotal > 0 && (
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>SGST:</span>
+                <span>{formatINR(sgstTotal)}</span>
+              </div>
+            )}
+            {igstTotal > 0 && (
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>IGST:</span>
+                <span>{formatINR(igstTotal)}</span>
+              </div>
+            )}
+            {isSaleMode && (
+              <div className="flex items-center justify-between gap-2 pt-1 text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span>Round Off:</span>
+                  <div className="inline-flex items-center rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5 font-sans">
+                    {(['auto', 'manual', 'off'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => {
+                          if (mode === 'manual' && roundOffMode !== 'manual') {
+                            setManualRoundOffInput(appliedRoundOff.toFixed(2));
+                          }
+                          setRoundOffMode(mode);
+                        }}
+                        className={`h-5 px-1.5 text-[10px] font-semibold rounded transition-colors capitalize ${
+                          roundOffMode === mode
+                            ? 'theme-bg text-white'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {roundOffMode === 'manual' ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="-1000"
+                      max="1000"
+                      value={manualRoundOffInput}
+                      onChange={e => setManualRoundOffInput(e.target.value)}
+                      aria-label="Manual round off amount"
+                      className="w-20 h-7 px-1.5 text-right text-xs font-mono border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                ) : (
+                  <span
+                    className={`font-semibold ${
+                      appliedRoundOff > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : appliedRoundOff < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : ''
+                    }`}
+                  >
+                    {appliedRoundOff > 0
+                      ? `+${formatINR(appliedRoundOff)}`
+                      : appliedRoundOff < 0
+                      ? `-${formatINR(Math.abs(appliedRoundOff))}`
+                      : formatINR(0)}
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="border-t border-slate-300 dark:border-slate-700 pt-2 flex justify-between text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+              <span>Grand Total:</span>
+              <span className="theme-text">{formatINR(grandTotal)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">

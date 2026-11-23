@@ -177,6 +177,7 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Day Book Report Print and Export"
+      data-print-portal="true"
       onClick={onClose}
       className="print-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
     >
@@ -461,7 +462,7 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
                               return (
                                 <tr key={v.id}>
                                   <td className="py-1 px-2 font-mono font-semibold text-slate-900 border-r border-slate-200 whitespace-nowrap">
-                                    {v.voucherNo}
+                                    {v.voucherNo || '—'}
                                   </td>
                                   <td className="py-1 px-2 font-semibold text-slate-700 border-r border-slate-200 whitespace-nowrap">
                                     {formatCategoryLabel(v.type)}

@@ -88,10 +88,10 @@
   background: rgba(100, 116, 139, 0.65);
 }
 
-/* Bulletproof single-page print styling for A5 & A4 GST invoices & Custom Templates */
+/* Bulletproof print styling for A5 (Half-Page on A4 Xerox) & A4 (Full Page) GST invoices, Reports & Custom Templates */
 @media print {
   @page {
-    size: auto;
+    size: A4 portrait;
     margin: 5mm;
   }
 
@@ -117,15 +117,18 @@
     print-color-adjust: exact !important;
   }
 
-  /* Hide app chrome, controls, and background shell when printing modal */
+  /* Hide ALL website chrome and ANY third-party/host overlays injected into <body> (e.g., preview bars/badges) */
+  body > *:not(#root):not([data-print-portal="true"]),
+  body.portal-print-active > *:not([data-print-portal="true"]),
   .no-print,
   .app-printing-hidden,
-  body.portal-print-active #root,
   aside,
   header,
   nav,
+  footer,
   .print-hide {
     display: none !important;
+    visibility: hidden !important;
   }
 
   /* Ensure modal dialog does not clip or create dark overlay */
@@ -175,7 +178,7 @@
     box-shadow: none !important;
   }
 
-  /* Crisp full-bleed single-page printable sheet */
+  /* Crisp printable sheet base */
   .print-only-container {
     display: block !important;
     position: static !important;
@@ -196,6 +199,95 @@
     print-color-adjust: exact !important;
   }
 
+  /* A5 Mode: Strictly fits inside the TOP HALF (210mm x 147mm) of an A4 Xerox page */
+  .print-only-container.print-sheet-a5 {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    height: 147mm !important;
+    min-height: 147mm !important;
+    max-height: 147mm !important;
+    margin: 0 !important;
+    padding: 5.5mm 7mm 3.5mm 7mm !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    border-bottom: 0.35mm dashed #94a3b8 !important;
+    font-size: 8px !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-only-container.print-sheet-a5 h1 {
+    font-size: 11px !important;
+    line-height: 1.15 !important;
+  }
+
+  .print-only-container.print-sheet-a5 .print-tight-mb {
+    margin-bottom: 3.5px !important;
+  }
+
+  .print-only-container.print-sheet-a5 .print-tight-p {
+    padding: 3px 6px !important;
+  }
+
+  .print-only-container.print-sheet-a5 .print-sig-gap {
+    margin-top: 10px !important;
+  }
+
+  .print-only-container.print-sheet-a5 table {
+    font-size: 8px !important;
+  }
+
+  .print-only-container.print-sheet-a5 th,
+  .print-only-container.print-sheet-a5 td {
+    padding: 1.5px 4px !important;
+  }
+
+  /* A4 Mode: Spacious Full-Page A4 Layout (210mm x 297mm) */
+  .print-only-container.print-sheet-a4 {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 294mm !important;
+    margin: 0 !important;
+    padding: 8mm 9mm !important;
+    box-sizing: border-box !important;
+    font-size: 10.5px !important;
+    line-height: 1.38 !important;
+  }
+
+  .print-only-container.print-sheet-a4 h1 {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-only-container.print-sheet-a4 .print-tight-mb {
+    margin-bottom: 10px !important;
+  }
+
+  .print-only-container.print-sheet-a4 .print-tight-p {
+    padding: 7px 10px !important;
+  }
+
+  .print-only-container.print-sheet-a4 .print-sig-gap {
+    margin-top: 28px !important;
+  }
+
+  .print-only-container.print-sheet-a4 table {
+    font-size: 10px !important;
+  }
+
+  .print-only-container.print-sheet-a4 th,
+  .print-only-container.print-sheet-a4 td {
+    padding: 4px 6px !important;
+  }
+
+  .print-footer-anchor {
+    margin-top: auto !important;
+    padding-top: 6px !important;
+  }
+
   .print-only-container .overflow-x-auto {
     overflow: visible !important;
   }
@@ -207,10 +299,10 @@
 
   .print-only-container th,
   .print-only-container td {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
-    padding-left: 4px !important;
-    padding-right: 4px !important;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: 4px;
+    padding-right: 4px;
   }
 
   .print-tight-mb {

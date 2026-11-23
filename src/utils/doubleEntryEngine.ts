@@ -22,6 +22,7 @@ export const SYSTEM_LEDGER_DEFINITIONS: {
   { id: 'ledger_sys_in_cgst', name: 'Input CGST Account', group: 'Duties & Taxes' },
   { id: 'ledger_sys_in_sgst', name: 'Input SGST Account', group: 'Duties & Taxes' },
   { id: 'ledger_sys_in_igst', name: 'Input IGST Account', group: 'Duties & Taxes' },
+  { id: 'ledger_sys_roundoff', name: 'Round Off Account', group: 'Indirect Expenses' },
 ];
 
 /**
@@ -113,12 +114,18 @@ export function generateJournalEntries(
     name: 'Input IGST Account',
     group: 'Duties & Taxes' as const,
   };
+  const roundOffAccount = ledgerMap.get('ledger_sys_roundoff') || {
+    id: 'ledger_sys_roundoff',
+    name: 'Round Off Account',
+    group: 'Indirect Expenses' as const,
+  };
 
   const grandTotal = Number((voucher.grandTotal || 0).toFixed(2));
   const subtotal = Number((voucher.subtotal || 0).toFixed(2));
   const cgstTotal = Number((voucher.cgstTotal || 0).toFixed(2));
   const sgstTotal = Number((voucher.sgstTotal || 0).toFixed(2));
   const igstTotal = Number((voucher.igstTotal || 0).toFixed(2));
+  const roundOff = Number((voucher.roundOff || 0).toFixed(2));
 
   switch (voucher.type) {
     case 'SALE': {
@@ -192,6 +199,18 @@ export function generateJournalEntries(
           debit: 0,
           credit: igstTotal,
           notes: 'Output IGST Liability',
+        });
+      }
+
+      // 4. Round-Off adjustment entry (Credit when positive round-up, Debit when negative round-down)
+      if (roundOff !== 0) {
+        entries.push({
+          accountId: roundOffAccount.id,
+          accountName: roundOffAccount.name,
+          accountGroup: roundOffAccount.group,
+          debit: roundOff < 0 ? Math.abs(roundOff) : 0,
+          credit: roundOff > 0 ? roundOff : 0,
+          notes: `Invoice Round Off ${voucher.voucherNo}`,
         });
       }
       break;
@@ -312,41 +331,69 @@ export function generateJournalEntries(
     }
 
     case 'RECEIPT': {
+      const refSuffix = voucher.voucherNo ? ` ${voucher.voucherNo}` : '';
+      const receiptEntries = (voucher.receiptEntries || []).filter(
+        r => r.partyId && Number(r.amount) > 0
+      );
+      const effectiveTotal =
+        receiptEntries.length > 0
+          ? Number(receiptEntries.reduce((sum, r) => sum + Number(r.amount || 0), 0).toFixed(2))
+          : grandTotal;
+
       // Debit: Cash or Bank
       if (voucher.paymentMode === 'CASH') {
         entries.push({
           accountId: cashAccount.id,
           accountName: cashAccount.name,
           accountGroup: 'Cash-in-hand',
-          debit: grandTotal,
+          debit: effectiveTotal,
           credit: 0,
-          notes: `Cash Inward ${voucher.voucherNo}`,
+          notes: `Cash Inward${refSuffix}`,
         });
       } else {
         entries.push({
           accountId: bankAccount.id,
           accountName: bankAccount.name,
           accountGroup: 'Bank Accounts',
-          debit: grandTotal,
+          debit: effectiveTotal,
           credit: 0,
-          notes: `Bank Deposit ${voucher.voucherNo}`,
+          notes: `Bank Deposit${refSuffix}`,
         });
       }
 
-      // Credit: Customer (reduces debtor receivable)
-      const creditTarget = partyAccount || {
-        id: 'party_misc_income',
-        name: voucher.partyName || 'Customer Receipt',
-        group: 'Sundry Debtors' as const,
-      };
-      entries.push({
-        accountId: creditTarget.id,
-        accountName: creditTarget.name,
-        accountGroup: creditTarget.group,
-        debit: 0,
-        credit: grandTotal,
-        notes: `Receipt Settlement ${voucher.voucherNo}`,
-      });
+      if (receiptEntries.length > 0) {
+        // Credit each customer individually (reduces each debtor's receivable)
+        for (const r of receiptEntries) {
+          const custAccount = ledgerMap.get(r.partyId) || {
+            id: r.partyId,
+            name: r.partyName || 'Customer Receipt',
+            group: 'Sundry Debtors' as const,
+          };
+          entries.push({
+            accountId: custAccount.id,
+            accountName: custAccount.name,
+            accountGroup: custAccount.group,
+            debit: 0,
+            credit: Number((r.amount || 0).toFixed(2)),
+            notes: r.notes?.trim() || `Receipt Settlement${refSuffix}`,
+          });
+        }
+      } else {
+        // Legacy single-customer fallback
+        const creditTarget = partyAccount || {
+          id: 'party_misc_income',
+          name: voucher.partyName || 'Customer Receipt',
+          group: 'Sundry Debtors' as const,
+        };
+        entries.push({
+          accountId: creditTarget.id,
+          accountName: creditTarget.name,
+          accountGroup: creditTarget.group,
+          debit: 0,
+          credit: grandTotal,
+          notes: `Receipt Settlement${refSuffix}`,
+        });
+      }
       break;
     }
 

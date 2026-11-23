@@ -48,7 +48,13 @@ export const NewVoucherModal: React.FC<NewVoucherModalProps> = ({
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-                {isEditMode ? `Edit Invoice #${editingVoucher?.voucherNo}` : 'New Invoice'}
+                {isEditMode
+                  ? editingVoucher?.type === 'RECEIPT'
+                    ? editingVoucher.voucherNo
+                      ? `Edit Receipt #${editingVoucher.voucherNo}`
+                      : 'Edit Receipt'
+                    : `Edit Invoice #${editingVoucher?.voucherNo}`
+                  : 'New Invoice'}
               </h3>
               <p className="text-[11px] text-slate-500">
                 {isEditMode

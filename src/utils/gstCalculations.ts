@@ -232,7 +232,16 @@ export function computeProfitAndLoss(
   const expenseMap: Record<string, number> = {};
   for (const l of ledgers) {
     if (l.group === 'Indirect Expenses' || l.group === 'Direct Expenses') {
-      expenseMap[l.name] = Math.abs(l.currentBalance || 0);
+      const bal = l.currentBalance || 0;
+      if (l.id === 'ledger_sys_roundoff') {
+        if (bal > 0) {
+          expenseMap[l.name] = bal;
+        } else if (bal < 0) {
+          indirectIncome += Math.abs(bal);
+        }
+      } else if (bal !== 0) {
+        expenseMap[l.name] = Math.abs(bal);
+      }
     }
   }
 

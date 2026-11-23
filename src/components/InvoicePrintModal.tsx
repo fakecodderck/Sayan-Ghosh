@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Printer,
   Download,
@@ -8,7 +9,8 @@ import {
   Copy,
   CheckCircle2,
   LayoutTemplate,
-  Edit2
+  Edit2,
+  ChevronDown
 } from 'lucide-react';
 import { TransactionVoucher } from '../types/accounting';
 import { formatINR, numberToWordsINR } from '../utils/gstCalculations';
@@ -39,6 +41,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
       : settings.paperSize || 'A5'
   );
   const [copied, setCopied] = useState(false);
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const printMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const canUse = Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length);
@@ -52,29 +56,71 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
 
   useEffect(() => {
     if (!voucher) return;
+    document.body.classList.add('portal-print-active');
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (showPrintOptions) {
+          setShowPrintOptions(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    const handleOutside = (e: MouseEvent) => {
+      if (printMenuRef.current && !printMenuRef.current.contains(e.target as Node)) {
+        setShowPrintOptions(false);
+      }
     };
     document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [voucher, onClose]);
+    document.addEventListener('mousedown', handleOutside);
+    return () => {
+      document.body.classList.remove('portal-print-active');
+      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('mousedown', handleOutside);
+    };
+  }, [voucher, onClose, showPrintOptions]);
 
   if (!voucher) return null;
 
-  const party = voucher.partyId ? getLedgerById(voucher.partyId) : undefined;
-  const partyName =
-    party?.name ||
-    voucher.guestDetails?.name ||
-    voucher.partyName ||
-    (voucher.type === 'PAYMENT' ? 'Expense Payment' : 'Walk-in / Cash Customer');
-  const partyAddress = party?.address || voucher.guestDetails?.address;
-  const partyGstin = party?.gstin || voucher.guestDetails?.gstin;
-  const partyPhone = party?.phone || voucher.guestDetails?.phone;
-  const partyStateCode = party?.stateCode || voucher.guestDetails?.stateCode;
+  const isSale = voucher.type === 'SALE';
+  const isCreditNote = voucher.type === 'CREDIT_NOTE';
+  const isDebitNote = voucher.type === 'DEBIT_NOTE';
+  const isPurchase = voucher.type === 'PURCHASE';
+  const isPayment = voucher.type === 'PAYMENT';
+  const isReceipt = voucher.type === 'RECEIPT';
+  const isGoodsDoc = isSale || isPurchase || isCreditNote || isDebitNote;
+  const receiptEntries = isReceipt ? voucher.receiptEntries || [] : [];
+  const hasMultiCustomerReceipt = isReceipt && receiptEntries.length > 1;
 
-  const handlePrint = () => {
-    window.focus();
-    window.print();
+  const resolvedPartyId =
+    voucher.partyId || (receiptEntries.length === 1 ? receiptEntries[0].partyId : undefined);
+  const party = resolvedPartyId ? getLedgerById(resolvedPartyId) : undefined;
+  const partyName = hasMultiCustomerReceipt
+    ? `${receiptEntries.length} Customers (${receiptEntries.map(r => r.partyName).join(', ')})`
+    : party?.name ||
+      (receiptEntries.length === 1 ? receiptEntries[0].partyName : '') ||
+      voucher.guestDetails?.name ||
+      voucher.partyName ||
+      (isPayment ? 'Expense Payment' : 'Walk-in / Cash Customer');
+  const partyAddress = hasMultiCustomerReceipt ? undefined : party?.address || voucher.guestDetails?.address;
+  const partyGstin = hasMultiCustomerReceipt ? undefined : party?.gstin || voucher.guestDetails?.gstin;
+  const partyPhone = hasMultiCustomerReceipt ? undefined : party?.phone || voucher.guestDetails?.phone;
+  const partyStateCode = hasMultiCustomerReceipt ? undefined : party?.stateCode || voucher.guestDetails?.stateCode;
+
+  const handlePrintWithSize = (targetSize: 'A5' | 'A4') => {
+    setShowPrintOptions(false);
+    if (paperSize !== targetSize) {
+      setPaperSize(targetSize);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.focus();
+          window.print();
+        });
+      });
+    } else {
+      window.focus();
+      window.print();
+    }
   };
 
   const handleDownloadPdf = () => {
@@ -88,12 +134,19 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
   };
 
   const handleCopySummary = () => {
+    const receiptBreakdown =
+      isReceipt && receiptEntries.length > 0
+        ? receiptEntries.map(r => `  - ${r.partyName}: ${formatINR(r.amount)}`).join('\n') + '\n'
+        : '';
+
     const text =
       `*${settings.name}*\n` +
-      `Doc: ${voucher.voucherNo} (${voucher.type})\n` +
+      (voucher.voucherNo ? `Doc: ${voucher.voucherNo} (${voucher.type})\n` : `Type: ${voucher.type}\n`) +
       `Date: ${voucher.date}\n` +
-      `Party: ${partyName}\n` +
-      `Amount: ${formatINR(voucher.grandTotal)}\n` +
+      (hasMultiCustomerReceipt
+        ? `Customers:\n${receiptBreakdown}`
+        : `Party: ${partyName}\n`) +
+      `Total: ${formatINR(voucher.grandTotal)}\n` +
       `Payment Mode: ${voucher.paymentMode}\n` +
       (voucher.referenceNo ? `Ref: ${voucher.referenceNo}\n` : '') +
       `Thank you for your business!`;
@@ -103,20 +156,12 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const isSale = voucher.type === 'SALE';
-  const isCreditNote = voucher.type === 'CREDIT_NOTE';
-  const isDebitNote = voucher.type === 'DEBIT_NOTE';
-  const isPurchase = voucher.type === 'PURCHASE';
-  const isPayment = voucher.type === 'PAYMENT';
-  const isReceipt = voucher.type === 'RECEIPT';
-  const isGoodsDoc = isSale || isPurchase || isCreditNote || isDebitNote;
-
   let docTitle = voucher.isGstBill ? 'TAX INVOICE' : 'BILL OF SUPPLY';
   if (isCreditNote) docTitle = 'CREDIT NOTE (SALES RETURN)';
   else if (isDebitNote) docTitle = 'DEBIT NOTE (PURCHASE RETURN)';
   else if (isPurchase) docTitle = 'PURCHASE INVOICE';
   else if (isPayment) docTitle = 'PAYMENT INVOICE';
-  else if (isReceipt) docTitle = 'RECEIPT INVOICE';
+  else if (isReceipt) docTitle = 'PAYMENT RECEIPT';
 
   const hsnBreakup: Record<
     string,
@@ -155,21 +200,27 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
 
   const upiUri =
     settings.showQrCode !== false && settings.upiId
-      ? buildUpiPaymentUri(settings.upiId, settings.name, voucher.grandTotal, `Inv ${voucher.voucherNo}`)
+      ? buildUpiPaymentUri(
+          settings.upiId,
+          settings.name,
+          voucher.grandTotal,
+          voucher.voucherNo ? `Inv ${voucher.voucherNo}` : 'Receipt'
+        )
       : '';
 
-  return (
+  const modalNode = (
     <div
       role="dialog"
       aria-modal="true"
+      data-print-portal="true"
       onClick={onClose}
       className="print-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
     >
       <style>{`
         @media print {
           @page {
-            size: ${paperSize} portrait;
-            margin: 5mm;
+            size: A4 portrait;
+            margin: 0mm;
           }
         }
       `}</style>
@@ -186,10 +237,10 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate">
-                {docTitle} ({paperSize} Format)
+                {docTitle} ({paperSize === 'A5' ? 'A5 · Half A4 Page' : 'A4 · Full Page'})
               </h3>
               <p className="text-[10px] sm:text-xs text-slate-500 truncate font-mono">
-                #{voucher.voucherNo} · {voucher.date}
+                {voucher.voucherNo ? `#${voucher.voucherNo} · ${voucher.date}` : voucher.date}
               </p>
             </div>
           </div>
@@ -214,20 +265,22 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
               <button
                 type="button"
                 onClick={() => setPaperSize('A5')}
-                className={`h-7 px-2.5 rounded-md transition-all inline-flex items-center justify-center ${
+                title="A5 Half-Page on A4 Xerox Sheet (210 × 148 mm)"
+                className={`h-7 px-2.5 rounded-md transition-all inline-flex items-center justify-center whitespace-nowrap ${
                   paperSize === 'A5' ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs font-bold' : ''
                 }`}
               >
-                A5
+                A5 (Half A4)
               </button>
               <button
                 type="button"
                 onClick={() => setPaperSize('A4')}
-                className={`h-7 px-2.5 rounded-md transition-all inline-flex items-center justify-center ${
+                title="Full A4 Sheet (210 × 297 mm)"
+                className={`h-7 px-2.5 rounded-md transition-all inline-flex items-center justify-center whitespace-nowrap ${
                   paperSize === 'A4' ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs font-bold' : ''
                 }`}
               >
-                A4
+                A4 (Full)
               </button>
             </div>
 
@@ -263,14 +316,59 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
               <span>Download PDF</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="theme-bg theme-bg-hover h-8 inline-flex items-center justify-center gap-1.5 px-3 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print {paperSize}</span>
-            </button>
+            <div className="relative" ref={printMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowPrintOptions(prev => !prev)}
+                className="theme-bg theme-bg-hover h-8 inline-flex items-center justify-center gap-1.5 px-3 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print</span>
+                <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+              </button>
+
+              {showPrintOptions && (
+                <div className="absolute right-0 mt-1.5 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-1.5 z-50 space-y-1">
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Choose Print Format
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintWithSize('A4')}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                      paperSize === 'A4'
+                        ? 'theme-soft-badge'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'
+                    }`}
+                  >
+                    <div>
+                      <p className="text-xs font-bold">A4 — Full Page</p>
+                      <p className="text-[10px] opacity-75">210 × 297 mm full sheet</p>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-current/20">
+                      A4
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintWithSize('A5')}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                      paperSize === 'A5'
+                        ? 'theme-soft-badge'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100'
+                    }`}
+                  >
+                    <div>
+                      <p className="text-xs font-bold">A5 — Half A4 Xerox Page</p>
+                      <p className="text-[10px] opacity-75">Top half (210 × 148 mm) on A4</p>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-current/20">
+                      A5
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -284,12 +382,14 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
         </div>
 
         {/* Invoice Preview Viewport */}
-        <div className="print-viewport-wrapper flex-1 overflow-y-auto p-2.5 sm:p-6 md:p-8 bg-slate-100 dark:bg-slate-950/60 flex justify-center">
+        <div className="print-viewport-wrapper flex-1 overflow-y-auto p-2.5 sm:p-6 md:p-8 bg-slate-100 dark:bg-slate-950/60 flex justify-center items-start">
           <div
             ref={printAreaRef}
-            className={`print-only-container w-full ${
-              paperSize === 'A5' ? 'max-w-[560px]' : 'max-w-[760px]'
-            } bg-white text-slate-900 p-4 sm:p-6 shadow-sm border border-slate-300 font-sans text-xs leading-relaxed rounded-xs`}
+            className={`print-only-container w-full bg-white text-slate-900 shadow-sm border border-slate-300 font-sans rounded-xs flex flex-col ${
+              paperSize === 'A5'
+                ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 text-[11px] leading-snug'
+                : 'print-sheet-a4 max-w-[780px] min-h-[920px] p-5 sm:p-8 text-xs leading-relaxed'
+            }`}
           >
             {useCustomTemplate && settings.invoiceTemplate ? (
               <CustomInvoiceRenderer
@@ -330,9 +430,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                         {docTitle}
                       </div>
                       <div className="mt-2 text-[10px] text-slate-700 space-y-0.5 font-mono">
-                        <p>
-                          <strong>Doc No:</strong> {voucher.voucherNo}
-                        </p>
+                        {voucher.voucherNo && (
+                          <p>
+                            <strong>Doc No:</strong> {voucher.voucherNo}
+                          </p>
+                        )}
                         <p>
                           <strong>Date:</strong> {voucher.date}
                         </p>
@@ -352,20 +454,28 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                 {/* Party Details */}
                 <div className="border border-slate-300 p-2.5 print-tight-p rounded-xs mb-3 print-tight-mb bg-slate-50/50 text-[10px]">
                   <p className="uppercase font-bold text-slate-500 tracking-wider">
-                    {isPayment ? 'Paid To (Beneficiary)' : isReceipt ? 'Received From (Customer)' : 'Billed To (Party Details)'}
+                    {isPayment
+                      ? 'Paid To (Beneficiary)'
+                      : isReceipt
+                      ? hasMultiCustomerReceipt
+                        ? `Received From (${receiptEntries.length} Customers)`
+                        : 'Received From (Customer)'
+                      : 'Billed To (Party Details)'}
                     {voucher.customerMode === 'guest' && ' · Guest Customer'}
                   </p>
                   <p className="font-bold text-slate-950 text-xs sm:text-sm mt-0.5">{partyName}</p>
                   {partyAddress && <p className="text-slate-600 mt-0.5">{partyAddress}</p>}
-                  <div className="mt-1 flex flex-wrap gap-x-3 text-slate-700">
-                    {partyGstin && (
-                      <p>
-                        GSTIN: <strong className="font-mono">{partyGstin}</strong>
-                      </p>
-                    )}
-                    {partyStateCode && <p>State Code: {partyStateCode}</p>}
-                    {partyPhone && <p>Ph: {partyPhone}</p>}
-                  </div>
+                  {!hasMultiCustomerReceipt && (
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-slate-700">
+                      {partyGstin && (
+                        <p>
+                          GSTIN: <strong className="font-mono">{partyGstin}</strong>
+                        </p>
+                      )}
+                      {partyStateCode && <p>State Code: {partyStateCode}</p>}
+                      {partyPhone && <p>Ph: {partyPhone}</p>}
+                    </div>
+                  )}
                   {voucher.notes && (
                     <p className="text-[10px] text-slate-500 italic mt-1.5 border-t border-slate-200 pt-1">
                       Remark: {voucher.notes}
@@ -486,6 +596,16 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                             <span>{formatINR(voucher.igstTotal)}</span>
                           </div>
                         )}
+                        {Math.abs(voucher.roundOff || 0) > 0 && (
+                          <div className="flex justify-between text-slate-700">
+                            <span>Round Off:</span>
+                            <span>
+                              {(voucher.roundOff || 0) > 0
+                                ? `+${formatINR(voucher.roundOff!)}`
+                                : `-${formatINR(Math.abs(voucher.roundOff!))}`}
+                            </span>
+                          </div>
+                        )}
                         <div className="border-t-2 border-slate-900 pt-1.5 flex justify-between font-bold text-xs sm:text-sm text-slate-950">
                           <span>Grand Total:</span>
                           <span>{formatINR(voucher.grandTotal)}</span>
@@ -528,35 +648,76 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                     )}
                   </>
                 ) : (
-                  <div className="border border-slate-300 rounded-xs p-4 mb-4 bg-slate-50/40 space-y-3 print-avoid-break">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-semibold text-slate-600 uppercase text-[10px]">Payment Mode</span>
-                      <span className="font-mono font-bold text-slate-900 bg-slate-200/80 px-2.5 py-0.5 rounded-sm">
-                        {voucher.paymentMode}
-                      </span>
-                    </div>
-                    {voucher.referenceNo && (
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-[10px]">
-                        <span className="font-semibold text-slate-600">Cheque / UTR / Reference No:</span>
-                        <span className="font-mono font-bold text-slate-900">{voucher.referenceNo}</span>
+                  <div className="space-y-3 mb-4 print-avoid-break">
+                    {isReceipt && receiptEntries.length > 0 && (
+                      <div className="border border-slate-300 rounded-xs overflow-x-auto">
+                        <table className="w-full text-left border-collapse print-table text-[10px]">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-300 font-bold text-slate-800 uppercase">
+                              <th className="py-1.5 px-2 w-8 text-center border-r border-slate-200">#</th>
+                              <th className="py-1.5 px-2 border-r border-slate-200">Customer Name</th>
+                              <th className="py-1.5 px-2 w-28 text-right border-r border-slate-200">Available Due</th>
+                              <th className="py-1.5 px-2 border-r border-slate-200">Remark</th>
+                              <th className="py-1.5 px-2 w-28 text-right">Amount Received (₹)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {receiptEntries.map((entry, idx) => (
+                              <tr key={`${entry.partyId}_${idx}`}>
+                                <td className="py-1 px-2 text-center text-slate-500 border-r border-slate-200">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-1 px-2 border-r border-slate-200 font-semibold text-slate-900">
+                                  {entry.partyName}
+                                </td>
+                                <td className="py-1 px-2 text-right font-mono text-slate-600 border-r border-slate-200">
+                                  {entry.availableDue !== undefined ? formatINR(entry.availableDue) : '—'}
+                                </td>
+                                <td className="py-1 px-2 text-slate-600 border-r border-slate-200">
+                                  {entry.notes || '—'}
+                                </td>
+                                <td className="py-1 px-2 text-right font-mono font-bold text-slate-950">
+                                  {formatINR(entry.amount)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-semibold text-slate-600 uppercase text-[10px]">Settlement Amount</span>
-                      <span className="font-mono font-extrabold text-base sm:text-lg text-slate-950">
-                        {formatINR(voucher.grandTotal)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-slate-500 uppercase text-[9px] block">Amount in Words:</span>
-                      <p className="font-semibold text-slate-900 italic mt-0.5 text-xs">
-                        {numberToWordsINR(voucher.grandTotal)}
-                      </p>
+
+                    <div className="border border-slate-300 rounded-xs p-3.5 bg-slate-50/40 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <span className="font-semibold text-slate-600 uppercase text-[10px]">Payment Mode</span>
+                        <span className="font-mono font-bold text-slate-900 bg-slate-200/80 px-2.5 py-0.5 rounded-sm">
+                          {voucher.paymentMode}
+                        </span>
+                      </div>
+                      {voucher.referenceNo && (
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2 text-[10px]">
+                          <span className="font-semibold text-slate-600">Cheque / UTR / Reference No:</span>
+                          <span className="font-mono font-bold text-slate-900">{voucher.referenceNo}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <span className="font-semibold text-slate-600 uppercase text-[10px]">
+                          {isReceipt ? 'Total Amount Received' : 'Settlement Amount'}
+                        </span>
+                        <span className="font-mono font-extrabold text-base sm:text-lg text-slate-950">
+                          {formatINR(voucher.grandTotal)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500 uppercase text-[9px] block">Amount in Words:</span>
+                        <p className="font-semibold text-slate-900 italic mt-0.5 text-xs">
+                          {numberToWordsINR(voucher.grandTotal)}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-12 gap-3 pt-2.5 border-t border-slate-300 text-[9px] print-avoid-break">
+                <div className="print-footer-anchor grid grid-cols-12 gap-3 pt-2.5 border-t border-slate-300 text-[9px] print-avoid-break">
                   <div className="col-span-7">
                     <p className="font-bold uppercase text-slate-600">Terms &amp; Declaration:</p>
                     <p className="text-slate-500 whitespace-pre-line leading-tight mt-0.5">
@@ -576,9 +737,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                 </div>
               </>
             )}
+
+            {paperSize === 'A5' && (
+              <div className="print-cut-guide mt-2 pt-1 border-t border-dashed border-slate-300 flex items-center justify-between text-[8px] text-slate-400 select-none">
+                <span>✂ A5 Half-Page (Prints on Top Half of A4 Xerox)</span>
+                <span>Cut / Fold Here</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modalNode, document.body);
 };

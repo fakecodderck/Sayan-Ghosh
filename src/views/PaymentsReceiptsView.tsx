@@ -38,11 +38,17 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
       if (filterMode !== 'ALL' && v.paymentMode !== filterMode) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
+        const matchesReceiptEntries = v.receiptEntries?.some(
+          r =>
+            r.partyName.toLowerCase().includes(q) ||
+            (r.notes || '').toLowerCase().includes(q)
+        );
         return (
-          v.voucherNo.toLowerCase().includes(q) ||
-          v.partyName?.toLowerCase().includes(q) ||
-          v.referenceNo?.toLowerCase().includes(q) ||
-          v.notes?.toLowerCase().includes(q)
+          (v.voucherNo || '').toLowerCase().includes(q) ||
+          (v.partyName || '').toLowerCase().includes(q) ||
+          Boolean(matchesReceiptEntries) ||
+          (v.referenceNo || '').toLowerCase().includes(q) ||
+          (v.notes || '').toLowerCase().includes(q)
         );
       }
       return true;
@@ -233,7 +239,7 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                       {v.date}
                     </td>
                     <td className="py-2.5 px-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-200">
-                      {v.voucherNo}
+                      {v.voucherNo || '—'}
                     </td>
                     <td className="py-2.5 px-3">
                       <span
@@ -247,11 +253,37 @@ export const PaymentsReceiptsView: React.FC<PaymentsReceiptsViewProps> = ({
                       </span>
                     </td>
                     <td className="py-2.5 px-3">
-                      <p className="font-semibold text-slate-900 dark:text-slate-100">
-                        {v.partyName || 'Direct Expense / Petty Cash'}
-                      </p>
+                      {v.type === 'RECEIPT' && v.receiptEntries && v.receiptEntries.length > 1 ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              {v.receiptEntries.length} Customers
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                              Multi-Customer
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {v.receiptEntries.map((entry, idx) => (
+                              <span
+                                key={`${entry.partyId}_${idx}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-700 dark:text-slate-300 font-medium"
+                              >
+                                <span className="truncate max-w-[140px]">{entry.partyName}:</span>
+                                <span className="font-mono font-semibold text-teal-700 dark:text-teal-400">
+                                  {formatINR(entry.amount)}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">
+                          {v.receiptEntries?.[0]?.partyName || v.partyName || 'Direct Expense / Petty Cash'}
+                        </p>
+                      )}
                       {v.notes && (
-                        <p className="text-[10px] text-slate-400 truncate max-w-sm">{v.notes}</p>
+                        <p className="text-[10px] text-slate-400 truncate max-w-sm mt-0.5">{v.notes}</p>
                       )}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">

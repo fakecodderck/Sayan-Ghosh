@@ -130,10 +130,38 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [vouchers, activeCustomer]);
 
+  const getCustomerReceiptAmount = (v: TransactionVoucher, customerId: string): number => {
+    if (v.receiptEntries && v.receiptEntries.length > 0) {
+      const matchedSum = v.receiptEntries
+        .filter(e => e.partyId === customerId)
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      if (matchedSum > 0) return Number(matchedSum.toFixed(2));
+    }
+    return Number(v.grandTotal || 0);
+  };
+
+  const getCustomerReceiptNote = (v: TransactionVoucher, customerId: string): string => {
+    if (v.receiptEntries && v.receiptEntries.length > 0) {
+      const entryNotes = v.receiptEntries
+        .filter(e => e.partyId === customerId && e.notes)
+        .map(e => e.notes!.trim())
+        .filter(Boolean);
+      if (entryNotes.length > 0) {
+        return v.notes ? `${entryNotes.join('; ')} · ${v.notes}` : entryNotes.join('; ');
+      }
+    }
+    return v.notes || 'Payment received on account';
+  };
+
   const customerReceipts = useMemo(() => {
     if (!activeCustomer) return [];
     return vouchers
-      .filter(v => v.partyId === activeCustomer.id && v.type === 'RECEIPT')
+      .filter(
+        v =>
+          v.type === 'RECEIPT' &&
+          (v.partyId === activeCustomer.id ||
+            Boolean(v.receiptEntries?.some(e => e.partyId === activeCustomer.id)))
+      )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [vouchers, activeCustomer]);
 
@@ -142,8 +170,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   }, [customerSales]);
 
   const customerTotalPaid = useMemo(() => {
-    return customerReceipts.reduce((acc, v) => acc + v.grandTotal, 0);
-  }, [customerReceipts]);
+    if (!activeCustomer) return 0;
+    return customerReceipts.reduce(
+      (acc, v) => acc + getCustomerReceiptAmount(v, activeCustomer.id),
+      0
+    );
+  }, [customerReceipts, activeCustomer]);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -569,28 +601,38 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    customerReceipts.map(v => (
-                      <tr key={v.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                        <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {v.date}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
-                          {v.voucherNo}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {v.paymentMode}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
-                          {v.referenceNo || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                          {v.notes || 'Payment received on account'}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-mono font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap">
-                          {formatINR(v.grandTotal)}
-                        </td>
-                      </tr>
-                    ))
+                    customerReceipts.map(v => {
+                      const amt = getCustomerReceiptAmount(v, activeCustomer.id);
+                      const receiptNote = getCustomerReceiptNote(v, activeCustomer.id);
+                      const isCombined = Boolean(v.receiptEntries && v.receiptEntries.length > 1);
+                      return (
+                        <tr key={v.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {v.date}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
+                            {v.voucherNo || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {v.paymentMode}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
+                            {v.referenceNo || '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                            <span>{receiptNote}</span>
+                            {isCombined && (
+                              <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                                Combined ({v.receiptEntries!.length} customers)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-mono font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap">
+                            {formatINR(amt)}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

@@ -106,9 +106,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     const matchingVouchers = vouchers
       .filter(
         v =>
-          v.voucherNo.toLowerCase().includes(q) ||
+          (v.voucherNo || '').toLowerCase().includes(q) ||
           (v.partyName || '').toLowerCase().includes(q) ||
-          (v.guestDetails?.name || '').toLowerCase().includes(q)
+          (v.guestDetails?.name || '').toLowerCase().includes(q) ||
+          Boolean(v.receiptEntries?.some(r => r.partyName.toLowerCase().includes(q)))
       )
       .slice(0, 5);
 
@@ -154,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex items-center gap-2 min-w-0">
                       <FileText className="w-3.5 h-3.5 theme-text shrink-0" />
                       <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                        {v.voucherNo}
+                        {v.voucherNo || (v.type === 'RECEIPT' ? 'Receipt' : 'Invoice')}
                       </span>
                       <span className="text-slate-500 truncate">
                         {v.guestDetails?.name || v.partyName || 'Walk-in'}

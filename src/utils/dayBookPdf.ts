@@ -100,11 +100,14 @@ export function filterDayBookEntries(
     if (categorySet && !categorySet.has(v.type)) return false;
 
     if (q) {
-      const matchesNo = v.voucherNo.toLowerCase().includes(q);
+      const matchesNo = (v.voucherNo || '').toLowerCase().includes(q);
       const matchesParty = (v.guestDetails?.name || v.partyName || '').toLowerCase().includes(q);
+      const matchesReceiptEntries = Boolean(
+        v.receiptEntries?.some(r => r.partyName.toLowerCase().includes(q))
+      );
       const matchesNotes = (v.notes || '').toLowerCase().includes(q);
       const matchesRef = (v.referenceNo || '').toLowerCase().includes(q);
-      if (!matchesNo && !matchesParty && !matchesNotes && !matchesRef) return false;
+      if (!matchesNo && !matchesParty && !matchesReceiptEntries && !matchesNotes && !matchesRef) return false;
     }
     return true;
   });
@@ -603,7 +606,7 @@ export function downloadDayBookCsv(options: DayBookReportOptions): void {
       rows.push(
         [
           v.date,
-          v.voucherNo,
+          v.voucherNo || '-',
           formatCategoryLabel(v.type),
           v.guestDetails?.name || v.partyName || 'Direct Cash Entry',
           v.paymentMode,

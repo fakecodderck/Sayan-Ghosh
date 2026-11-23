@@ -183,6 +183,7 @@ export const StockReportModal: React.FC<StockReportModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Stock Report Print and Export"
+      data-print-portal="true"
       onClick={onClose}
       className="print-modal-root fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
     >

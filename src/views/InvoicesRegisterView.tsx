@@ -580,9 +580,17 @@ export const InvoicesRegisterView: React.FC<InvoicesRegisterViewProps> = ({
             </div>
 
             {/* Totals Summary */}
-            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-mono tabular-nums text-xs">
-              <div className="text-slate-500">
-                Taxable: {formatINR(selectedVoucherForDetails.subtotal)}
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 font-mono tabular-nums text-xs">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-500">
+                <span>Taxable: {formatINR(selectedVoucherForDetails.subtotal)}</span>
+                {Math.abs(selectedVoucherForDetails.roundOff || 0) > 0 && (
+                  <span>
+                    Round Off:{' '}
+                    {(selectedVoucherForDetails.roundOff || 0) > 0
+                      ? `+${formatINR(selectedVoucherForDetails.roundOff!)}`
+                      : `-${formatINR(Math.abs(selectedVoucherForDetails.roundOff!))}`}
+                  </span>
+                )}
               </div>
               <div className="text-base font-extrabold theme-text">
                 Grand Total: {formatINR(selectedVoucherForDetails.grandTotal)}
