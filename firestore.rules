@@ -106,12 +106,13 @@ service cloud.firestore {
              data.keys().hasOnly([
                'id', 'name', 'gstin', 'state', 'stateCode', 'phone', 'email', 'address',
                'bankName', 'accountNo', 'ifsc', 'branch', 'upiId', 'invoiceTerms',
-               'paperSize', 'showQrCode', 'authorizedSignatoryTitle', 'themeColor',
+               'paperSize', 'printTextSize', 'showQrCode', 'authorizedSignatoryTitle', 'themeColor',
                'invoiceTemplate', 'updatedBy', 'updatedAt'
              ]) &&
              data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
              (!('paperSize' in data) || data.paperSize in ['A5', 'A4']) &&
+             (!('printTextSize' in data) || data.printTextSize in ['sm', 'md', 'lg', 'xl']) &&
              (!('showQrCode' in data) || data.showQrCode is bool) &&
              (!('invoiceTemplate' in data) || data.invoiceTemplate is map) &&
              (!('invoiceTerms' in data) || (data.invoiceTerms is string && data.invoiceTerms.size() <= 2000));

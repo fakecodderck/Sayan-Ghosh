@@ -12,7 +12,7 @@ import {
   Edit2,
   ChevronDown
 } from 'lucide-react';
-import { TransactionVoucher } from '../types/accounting';
+import { PrintTextSize, TransactionVoucher } from '../types/accounting';
 import { formatINR, numberToWordsINR } from '../utils/gstCalculations';
 import { useAccounting } from '../context/AccountingContext';
 import { QrCodeSvg, buildUpiPaymentUri } from '../utils/qrCode';
@@ -40,6 +40,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
       ? settings.invoiceTemplate.paperSize
       : settings.paperSize || 'A5'
   );
+  const [textSize, setTextSize] = useState<PrintTextSize>(settings.printTextSize || 'lg');
   const [copied, setCopied] = useState(false);
   const [showPrintOptions, setShowPrintOptions] = useState(false);
   const printMenuRef = useRef<HTMLDivElement>(null);
@@ -52,6 +53,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
         ? settings.invoiceTemplate.paperSize
         : settings.paperSize || 'A5'
     );
+    setTextSize(settings.printTextSize || 'lg');
   }, [settings, voucher?.id]);
 
   useEffect(() => {
@@ -129,6 +131,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
       settings,
       party,
       paperSize,
+      textSize,
       useCustomTemplate,
     });
   };
@@ -284,6 +287,35 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
               </button>
             </div>
 
+            <div
+              className="inline-flex items-center h-8 p-0.5 bg-slate-200/80 dark:bg-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-300 shrink-0"
+              title="Select Print & Preview Text Size"
+            >
+              <span className="px-1.5 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                Text
+              </span>
+              {(
+                [
+                  { id: 'sm', label: 'S', title: 'Small text' },
+                  { id: 'md', label: 'M', title: 'Medium text' },
+                  { id: 'lg', label: 'L', title: 'Large text (Default)' },
+                  { id: 'xl', label: 'XL', title: 'Extra Large text' },
+                ] as const
+              ).map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTextSize(opt.id)}
+                  title={opt.title}
+                  className={`h-7 px-2 rounded-md transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                    textSize === opt.id ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs font-bold' : ''
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             {onEditVoucher && (
               <button
                 type="button"
@@ -385,10 +417,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
         <div className="print-viewport-wrapper flex-1 overflow-y-auto p-2.5 sm:p-6 md:p-8 bg-slate-100 dark:bg-slate-950/60 flex justify-center items-start">
           <div
             ref={printAreaRef}
+            data-text-size={textSize}
             className={`print-only-container w-full bg-white text-slate-900 shadow-sm border border-slate-300 font-sans rounded-xs flex flex-col ${
               paperSize === 'A5'
-                ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 text-[11px] leading-snug'
-                : 'print-sheet-a4 max-w-[780px] min-h-[920px] p-5 sm:p-8 text-xs leading-relaxed'
+                ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 leading-snug'
+                : 'print-sheet-a4 max-w-[780px] min-h-[920px] p-5 sm:p-8 leading-relaxed'
             }`}
           >
             {useCustomTemplate && settings.invoiceTemplate ? (
@@ -510,22 +543,22 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({ voucher, o
                               <td className="py-1 px-2 border-r border-slate-200 font-medium text-slate-900">
                                 {item.name}
                               </td>
-                              <td className="py-1 px-2 text-center font-mono text-slate-600 border-r border-slate-200">
+                              <td className="py-1 px-2 text-center font-mono text-slate-600 border-r border-slate-200 whitespace-nowrap">
                                 {item.hsn || '-'}
                               </td>
-                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200">
+                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                                 {item.qty} {item.unit}
                               </td>
-                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200">
+                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                                 {item.rate.toFixed(2)}
                               </td>
-                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200">
+                              <td className="py-1 px-2 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                                 {item.taxableAmount.toFixed(2)}
                               </td>
-                              <td className="py-1 px-2 text-center font-mono border-r border-slate-200">
+                              <td className="py-1 px-2 text-center font-mono border-r border-slate-200 whitespace-nowrap">
                                 {item.gstRate}%
                               </td>
-                              <td className="py-1 px-2 text-right font-mono font-bold text-slate-950">
+                              <td className="py-1 px-2 text-right font-mono font-bold text-slate-950 whitespace-nowrap">
                                 {item.total.toFixed(2)}
                               </td>
                             </tr>

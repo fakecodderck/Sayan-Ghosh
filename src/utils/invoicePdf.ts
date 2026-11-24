@@ -3,6 +3,7 @@ import {
   CompanySettings,
   InvoiceBlockConfig,
   LedgerAccount,
+  PrintTextSize,
   TransactionVoucher
 } from '../types/accounting';
 import { numberToWordsINR } from './gstCalculations';
@@ -13,6 +14,7 @@ export interface DownloadInvoicePdfOptions {
   settings: CompanySettings;
   party?: LedgerAccount;
   paperSize?: 'A5' | 'A4';
+  textSize?: PrintTextSize;
   useCustomTemplate?: boolean;
   customHeaderTitle?: string;
   showBankDetails?: boolean;
@@ -88,6 +90,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     settings,
     party,
     paperSize: optPaperSize,
+    textSize: optTextSize,
     useCustomTemplate = false,
     customHeaderTitle,
     showBankDetails = true,
@@ -97,6 +100,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
 
   const tpl = useCustomTemplate && settings.invoiceTemplate?.blocks.length ? settings.invoiceTemplate : undefined;
   const paperSize = optPaperSize || tpl?.paperSize || settings.paperSize || 'A5';
+  const textSize: PrintTextSize = optTextSize || settings.printTextSize || 'lg';
   const isA5 = paperSize === 'A5';
 
   const doc = new jsPDF({
@@ -120,9 +124,11 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
   const itemsCount = (voucher.items || []).length;
   // Auto-tighten spacing when there are many items so invoice stays within 1 half-page (A5) or 1 full page (A4)
   const isDense = isA5 ? itemsCount > 5 : itemsCount > 12;
-  const fsBase = isA5 ? (isDense ? 6.8 : 7.4) : isDense ? 8.4 : 9.4;
-  const fsSmall = fsBase - 0.9;
-  const lineH = isA5 ? (isDense ? 2.85 : 3.2) : isDense ? 3.8 : 4.4;
+  const textScale =
+    textSize === 'sm' ? 0.86 : textSize === 'md' ? 1.0 : textSize === 'xl' ? 1.28 : 1.15;
+  const fsBase = Number(((isA5 ? (isDense ? 7.4 : 8.2) : isDense ? 9.0 : 10.2) * textScale).toFixed(2));
+  const fsSmall = Number((fsBase * 0.9).toFixed(2));
+  const lineH = Number(((isA5 ? (isDense ? 3.1 : 3.5) : isDense ? 4.0 : 4.7) * (0.65 + textScale * 0.35)).toFixed(2));
 
   const isReceipt = voucher.type === 'RECEIPT';
   const receiptEntries = isReceipt ? voucher.receiptEntries || [] : [];
@@ -490,7 +496,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
     for (let idx = 0; idx < items.length; idx++) {
       const item = items[idx];
       const descLines = doc.splitTextToSize(item.name || '', cols[1].w - 2.4) as string[];
-      const rowH = Math.max(isA5 ? 4.5 : 5.2, descLines.length * (lineH - 0.2) + 1.4);
+      const rowH = Math.max(lineH + 1.5, descLines.length * (lineH + 0.1) + 1.6);
 
       if (y + rowH > maxY - 4) {
         doc.addPage();
@@ -506,6 +512,7 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
       doc.setFontSize(fsSmall);
       doc.setTextColor(15, 23, 42);
 
+      const textBaseline = y + Math.max(3.2, lineH - 0.15);
       let cx = margin;
       for (const col of cols) {
         let val = '';
@@ -520,13 +527,13 @@ export function downloadInvoicePdf(options: DownloadInvoicePdfOptions): void {
 
         if (col.key === 'name') {
           doc.setFont(fontName, 'bold');
-          doc.text(descLines, cx + 1.2, y + 3.2);
+          doc.text(descLines, cx + 1.2, textBaseline);
           doc.setFont(fontName, 'normal');
         } else {
           if (col.key === 'total') doc.setFont(fontName, 'bold');
           const tx =
             col.align === 'center' ? cx + col.w / 2 : col.align === 'right' ? cx + col.w - 1.2 : cx + 1.2;
-          doc.text(val, tx, y + 3.2, { align: col.align });
+          doc.text(val, tx, textBaseline, { align: col.align });
           if (col.key === 'total') doc.setFont(fontName, 'normal');
         }
         cx += col.w;

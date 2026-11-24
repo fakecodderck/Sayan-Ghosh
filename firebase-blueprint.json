@@ -105,6 +105,7 @@
         "upiId": { "type": "string", "maxLength": 80 },
         "invoiceTerms": { "type": "string", "maxLength": 2000 },
         "paperSize": { "type": "string", "enum": ["A5", "A4"] },
+        "printTextSize": { "type": "string", "enum": ["sm", "md", "lg", "xl"] },
         "showQrCode": { "type": "boolean" },
         "authorizedSignatoryTitle": { "type": "string", "maxLength": 120 },
         "themeColor": { "type": "string", "maxLength": 20 },

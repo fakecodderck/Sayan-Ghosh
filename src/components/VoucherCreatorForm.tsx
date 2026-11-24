@@ -989,6 +989,7 @@ export const VoucherCreatorForm: React.FC<VoucherCreatorFormProps> = ({
       voucher: target,
       settings,
       party: targetParty,
+      textSize: settings.printTextSize || 'lg',
       useCustomTemplate: Boolean(settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate?.blocks.length),
     });
   };

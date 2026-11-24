@@ -11,6 +11,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
+import { PrintTextSize } from '../types/accounting';
 import { formatINR, numberToWordsINR } from '../utils/gstCalculations';
 import { QrCodeSvg, buildUpiPaymentUri } from '../utils/qrCode';
 import { CustomInvoiceRenderer } from '../components/CustomInvoiceRenderer';
@@ -72,6 +73,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
     Boolean(settings.invoiceTemplate?.useAsDefault && hasCustomTemplate)
   );
   const [paperSize, setPaperSize] = useState<'A5' | 'A4'>(settings.paperSize || 'A5');
+  const [textSize, setTextSize] = useState<PrintTextSize>(settings.printTextSize || 'lg');
   const [showQrCode, setShowQrCode] = useState<boolean>(settings.showQrCode !== false);
   const [showBankDetails, setShowBankDetails] = useState(true);
   const [showHsnSummary, setShowHsnSummary] = useState(true);
@@ -89,6 +91,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
   // Sync defaults when settings load asynchronously
   useEffect(() => {
     setPaperSize(settings.paperSize || 'A5');
+    setTextSize(settings.printTextSize || 'lg');
     setShowQrCode(settings.showQrCode !== false);
     if (settings.invoiceTemplate?.useAsDefault && settings.invoiceTemplate.blocks.length > 0) {
       setUseCustomTemplate(true);
@@ -179,6 +182,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
       settings,
       party,
       paperSize,
+      textSize,
       useCustomTemplate,
       customHeaderTitle,
       showBankDetails,
@@ -191,6 +195,7 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
     await updateSettings({
       ...settings,
       paperSize,
+      printTextSize: textSize,
       showQrCode,
     });
     setIsSavedSettings(true);
@@ -486,6 +491,37 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
               </div>
             </div>
 
+            {/* Print Text Size Selector */}
+            <div>
+              <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                Print Text Size
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(
+                  [
+                    { id: 'sm', label: 'Small', short: 'S' },
+                    { id: 'md', label: 'Medium', short: 'M' },
+                    { id: 'lg', label: 'Large', short: 'L' },
+                    { id: 'xl', label: 'X-Large', short: 'XL' },
+                  ] as const
+                ).map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setTextSize(opt.id)}
+                    className={`py-1.5 px-2 rounded-lg border text-center transition-all ${
+                      textSize === opt.id
+                        ? 'theme-soft-badge font-bold'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <p className="text-xs leading-tight">{opt.short}</p>
+                    <p className="text-[9px] text-slate-400 leading-tight">{opt.label}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {!useCustomTemplate && (
               <>
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -563,10 +599,11 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
         <div className="print-viewport-wrapper lg:col-span-8 bg-slate-200 dark:bg-slate-950 p-3 sm:p-6 rounded-xl flex justify-center items-start overflow-x-auto w-full max-w-full">
           {currentInvoice ? (
             <div
+              data-text-size={textSize}
               className={`print-only-container bg-white text-slate-900 shadow-md border border-slate-300 font-sans w-full flex flex-col ${
                 paperSize === 'A5'
-                  ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 text-[11px] leading-snug'
-                  : 'print-sheet-a4 max-w-[760px] min-h-[920px] p-5 sm:p-7 text-xs leading-relaxed'
+                  ? 'print-sheet-a5 max-w-[680px] min-h-[440px] p-3.5 sm:p-5 leading-snug'
+                  : 'print-sheet-a4 max-w-[760px] min-h-[920px] p-5 sm:p-7 leading-relaxed'
               }`}
             >
               {useCustomTemplate && settings.invoiceTemplate ? (
@@ -666,20 +703,20 @@ export const GSTBillInvoiceView: React.FC<GSTBillInvoiceViewProps> = ({
                               {idx + 1}
                             </td>
                             <td className="py-1 px-2 border-r border-slate-200 font-medium">{item.name}</td>
-                            <td className="py-1 px-1.5 text-center font-mono border-r border-slate-200">{item.hsn}</td>
-                            <td className="py-1 px-1.5 text-right font-mono border-r border-slate-200">
+                            <td className="py-1 px-1.5 text-center font-mono border-r border-slate-200 whitespace-nowrap">{item.hsn}</td>
+                            <td className="py-1 px-1.5 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                               {item.qty} {item.unit}
                             </td>
-                            <td className="py-1 px-1.5 text-right font-mono border-r border-slate-200">
+                            <td className="py-1 px-1.5 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                               {item.rate.toFixed(2)}
                             </td>
-                            <td className="py-1 px-2 text-right font-mono border-r border-slate-200">
+                            <td className="py-1 px-2 text-right font-mono border-r border-slate-200 whitespace-nowrap">
                               {item.taxableAmount.toFixed(2)}
                             </td>
-                            <td className="py-1 px-1.5 text-center font-mono border-r border-slate-200">
+                            <td className="py-1 px-1.5 text-center font-mono border-r border-slate-200 whitespace-nowrap">
                               {item.gstRate}%
                             </td>
-                            <td className="py-1 px-2 text-right font-mono font-bold text-slate-950">
+                            <td className="py-1 px-2 text-right font-mono font-bold text-slate-950 whitespace-nowrap">
                               {item.total.toFixed(2)}
                             </td>
                           </tr>

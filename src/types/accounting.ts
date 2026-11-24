@@ -184,6 +184,8 @@ export interface InvoiceTemplateConfig {
   updatedAt?: string;
 }
 
+export type PrintTextSize = 'sm' | 'md' | 'lg' | 'xl';
+
 export interface CompanySettings {
   id: string;
   name: string;
@@ -200,6 +202,7 @@ export interface CompanySettings {
   upiId: string;
   invoiceTerms: string;
   paperSize: 'A5' | 'A4';
+  printTextSize?: PrintTextSize;
   showQrCode: boolean;
   authorizedSignatoryTitle: string;
   themeColor?: ThemeColor;
