@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { CompanySettings, TransactionVoucher, VoucherType } from '../types/accounting';
+import { CompanySettings, PrintTextSize, TransactionVoucher, VoucherType } from '../types/accounting';
 
 export interface DayGroupSummary {
   date: string;
@@ -22,6 +22,7 @@ export interface DayBookReportOptions {
   endDate: string;
   selectedCategories: VoucherType[]; // empty means ALL categories
   sortOrder?: 'asc' | 'desc';
+  textSize?: PrintTextSize;
 }
 
 export const DAYBOOK_CATEGORY_META: { key: VoucherType; label: string; shortLabel: string }[] = [
@@ -207,7 +208,14 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     endDate,
     selectedCategories,
     sortOrder = 'asc',
+    textSize: optTextSize,
   } = options;
+
+  const textSize: PrintTextSize = optTextSize || settings.printTextSize || 'lg';
+  const textScale =
+    textSize === 'sm' ? 0.88 : textSize === 'md' ? 1.0 : textSize === 'xl' ? 1.24 : 1.12;
+  const fs = (pt: number) => Number((pt * textScale).toFixed(2));
+  const rowScale = 0.65 + textScale * 0.35;
 
   const filtered = filterDayBookEntries(vouchers, startDate, endDate, selectedCategories);
   const groups = groupDayBookEntriesByDate(filtered, sortOrder);
@@ -235,21 +243,21 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
   const drawReportHeader = (isContinuation: boolean) => {
     y = margin;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(isContinuation ? 10 : 13);
+    doc.setFontSize(fs(isContinuation ? 10 : 13));
     doc.setTextColor(15, 23, 42);
-    doc.text(companyName.toUpperCase(), margin, y + 4);
+    doc.text(companyName.toUpperCase(), margin, y + 4.5);
 
-    doc.setFontSize(isContinuation ? 8.5 : 10);
+    doc.setFontSize(fs(isContinuation ? 8.5 : 10));
     doc.setTextColor(37, 99, 235);
-    doc.text(isContinuation ? 'DAY BOOK REPORT (CONT.)' : 'DAY BOOK REPORT', pageW - margin, y + 4, {
+    doc.text(isContinuation ? 'DAY BOOK REPORT (CONT.)' : 'DAY BOOK REPORT', pageW - margin, y + 4.5, {
       align: 'right',
     });
 
-    y += isContinuation ? 6.5 : 6;
+    y += (isContinuation ? 6.5 : 6.2) * rowScale;
 
     if (!isContinuation) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(fs(8));
       doc.setTextColor(71, 85, 105);
       const subInfo = [
         settings.gstin ? `GSTIN: ${settings.gstin}` : '',
@@ -259,24 +267,29 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
         .filter(Boolean)
         .join('  |  ');
       if (subInfo) {
-        const lines = doc.splitTextToSize(subInfo, cw * 0.65) as string[];
+        const lines = doc.splitTextToSize(subInfo, cw * 0.62) as string[];
         doc.text(lines.slice(0, 2), margin, y + 3);
       }
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
+      doc.setFontSize(fs(8));
       doc.setTextColor(30, 41, 59);
       doc.text(`Period: ${rangeLabel}`, pageW - margin, y + 3, { align: 'right' });
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      doc.text(`Category: ${truncateText(categoryLabel, 38)}`, pageW - margin, y + 7, { align: 'right' });
-      y += 10.5;
+      doc.text(
+        `Category: ${truncateText(categoryLabel, Math.max(22, Math.floor(38 / textScale)))}`,
+        pageW - margin,
+        y + 3 + 4 * rowScale,
+        { align: 'right' }
+      );
+      y += 10.5 * rowScale;
     } else {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(fs(7.5));
       doc.setTextColor(100, 116, 139);
       doc.text(`Period: ${rangeLabel}  |  Category: ${categoryLabel}`, margin, y + 2);
-      y += 4;
+      y += 4.2 * rowScale;
     }
 
     doc.setDrawColor(15, 23, 42);
@@ -305,7 +318,7 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
 
   const boxGap = 2.5;
   const boxW = (cw - boxGap * 3) / 4;
-  const boxH = 13.5;
+  const boxH = 13.5 * rowScale;
 
   summaryItems.forEach((item, i) => {
     const bx = margin + i * (boxW + boxGap);
@@ -315,26 +328,26 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     doc.roundedRect(bx, y, boxW, boxH, 1.5, 1.5, 'FD');
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
+    doc.setFontSize(fs(6.5));
     doc.setTextColor(100, 116, 139);
-    doc.text(item.label, bx + 2.5, y + 4.5);
+    doc.text(item.label, bx + 2.5, y + 4.5 * rowScale);
 
-    doc.setFontSize(9);
+    doc.setFontSize(fs(9));
     doc.setTextColor(...item.color);
-    doc.text(item.value, bx + 2.5, y + 10.5);
+    doc.text(item.value, bx + 2.5, y + 10.5 * rowScale);
   });
 
   y += boxH + 3;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(fs(7.5));
   doc.setTextColor(71, 85, 105);
   doc.text(
     `Days Covered: ${groups.length}   |   Total Invoices: ${filtered.length}   |   Total GST: ${formatRs(totalGst)}   |   Combined Volume: ${formatRs(totalGrand)}`,
     margin,
     y + 2.5
   );
-  y += 6;
+  y += 6 * rowScale;
 
   // Column layout for Day-wise table
   const cols = [
@@ -347,20 +360,23 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     { label: 'Amount (Rs.)', w: 26, align: 'right' as const },
   ];
 
-  const ensureSpace = (neededMm: number) => {
+  const ensureSpace = (neededMm: number): boolean => {
     if (y + neededMm > maxY) {
       doc.addPage();
       drawReportHeader(true);
+      return true;
     }
+    return false;
   };
 
+  const colHeaderH = 6 * rowScale;
   const drawTableColHeaders = () => {
     doc.setFillColor(241, 245, 249);
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
-    doc.rect(margin, y, cw, 6, 'FD');
+    doc.rect(margin, y, cw, colHeaderH, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(fs(7));
     doc.setTextColor(51, 65, 85);
 
     let cx = margin;
@@ -371,10 +387,10 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
           : col.align === 'center'
           ? cx + col.w / 2
           : cx + 1.5;
-      doc.text(col.label, tx, y + 4.1, { align: col.align });
+      doc.text(col.label, tx, y + colHeaderH * 0.68, { align: col.align });
       cx += col.w;
     }
-    y += 6;
+    y += colHeaderH;
   };
 
   if (groups.length === 0) {
@@ -382,45 +398,46 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     doc.setDrawColor(226, 232, 240);
     doc.rect(margin, y, cw, 16, 'FD');
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(fs(9));
     doc.setTextColor(100, 116, 139);
     doc.text('No Day Book invoices found for the selected date range and category filter.', pageW / 2, y + 9.5, {
       align: 'center',
     });
     y += 18;
   } else {
+    const bannerH = 6.5 * rowScale;
+    const rowH = 6.2 * rowScale;
+    const subH = 6.8 * rowScale;
+
     for (const group of groups) {
       // Ensure enough room for Date header + Column headers + at least 1 row
-      ensureSpace(24);
+      ensureSpace(bannerH + colHeaderH + rowH + 4);
 
       // Day Banner
       doc.setFillColor(15, 23, 42);
-      doc.rect(margin, y, cw, 6.5, 'F');
+      doc.rect(margin, y, cw, bannerH, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
+      doc.setFontSize(fs(8));
       doc.setTextColor(255, 255, 255);
-      doc.text(formatDateWithWeekday(group.date), margin + 2.5, y + 4.4);
+      doc.text(formatDateWithWeekday(group.date), margin + 2.5, y + bannerH * 0.68);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(fs(7.5));
       doc.text(
         `${group.entries.length} ${group.entries.length === 1 ? 'Invoice' : 'Invoices'}  |  Day Total: ${formatRs(group.grandTotal)}`,
         pageW - margin - 2.5,
-        y + 4.4,
+        y + bannerH * 0.68,
         { align: 'right' }
       );
-      y += 6.5;
+      y += bannerH;
 
       drawTableColHeaders();
 
       // Entries for this day
       group.entries.forEach((v, idx) => {
-        ensureSpace(7);
-        if (y === margin + 14.5) {
-          // Top of a freshly added continuation page
+        if (ensureSpace(rowH + 1)) {
           drawTableColHeaders();
         }
 
-        const rowH = 6.2;
         if (idx % 2 === 1) {
           doc.setFillColor(249, 250, 251);
           doc.rect(margin, y, cw, rowH, 'F');
@@ -432,9 +449,9 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
         const partyText = v.guestDetails?.name || v.partyName || 'Direct Cash Entry';
         const gstAmt = Number(v.cgstTotal || 0) + Number(v.sgstTotal || 0) + Number(v.igstTotal || 0);
         const cells = [
-          truncateText(v.voucherNo || '-', 19),
+          truncateText(v.voucherNo || '-', Math.max(12, Math.floor(19 / textScale))),
           formatCategoryLabel(v.type),
-          truncateText(partyText, 34),
+          truncateText(partyText, Math.max(20, Math.floor(34 / textScale))),
           v.paymentMode || '-',
           Number(v.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
           gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -445,7 +462,7 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
         cells.forEach((val, ci) => {
           const col = cols[ci];
           doc.setFont('helvetica', ci === 0 || ci === 6 ? 'bold' : 'normal');
-          doc.setFontSize(7.5);
+          doc.setFontSize(fs(7.5));
           doc.setTextColor(ci === 6 ? 15 : 51, ci === 6 ? 23 : 65, ci === 6 ? 42 : 85);
           const tx =
             col.align === 'right'
@@ -453,7 +470,7 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
               : col.align === 'center'
               ? cx + col.w / 2
               : cx + 1.5;
-          doc.text(val, tx, y + 4.2, { align: col.align });
+          doc.text(val, tx, y + rowH * 0.68, { align: col.align });
           cx += col.w;
         });
 
@@ -461,8 +478,7 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
       });
 
       // Day Subtotal Row
-      ensureSpace(9);
-      const subH = 6.8;
+      ensureSpace(subH + 2);
       doc.setFillColor(239, 246, 255);
       doc.setDrawColor(191, 219, 254);
       doc.setLineWidth(0.25);
@@ -477,12 +493,15 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
       if (group.debitNotes > 0) breakdownParts.push(`DN: ${formatRs(group.debitNotes)}`);
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
+      doc.setFontSize(fs(7));
       doc.setTextColor(30, 58, 138);
       doc.text(
-        truncateText(`Day Subtotal (${formatDateReadable(group.date)}):  ${breakdownParts.join('  |  ')}`, 78),
+        truncateText(
+          `Day Subtotal (${formatDateReadable(group.date)}):  ${breakdownParts.join('  |  ')}`,
+          Math.max(46, Math.floor(78 / textScale))
+        ),
         margin + 2,
-        y + 4.4
+        y + subH * 0.65
       );
 
       // Align taxable, GST, and total under the last 3 columns
@@ -490,23 +509,23 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
       const colGstX = colTaxableX + cols[5].w;
       const colTotalX = colGstX + cols[6].w;
 
-      doc.setFontSize(7.5);
+      doc.setFontSize(fs(7.5));
       doc.text(
         group.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         colTaxableX,
-        y + 4.4,
+        y + subH * 0.65,
         { align: 'right' }
       );
       doc.text(
         group.gst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         colGstX,
-        y + 4.4,
+        y + subH * 0.65,
         { align: 'right' }
       );
       doc.text(
         group.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         colTotalX,
-        y + 4.4,
+        y + subH * 0.65,
         { align: 'right' }
       );
 
@@ -514,33 +533,38 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     }
 
     // Period Grand Total Box
-    ensureSpace(20);
+    const grandBoxH = 11 * rowScale;
+    ensureSpace(grandBoxH + 8);
     doc.setFillColor(15, 23, 42);
-    doc.roundedRect(margin, y, cw, 11, 1.5, 1.5, 'F');
+    doc.roundedRect(margin, y, cw, grandBoxH, 1.5, 1.5, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(fs(8.5));
     doc.setTextColor(255, 255, 255);
-    doc.text(`PERIOD GRAND TOTAL (${filtered.length} Invoices across ${groups.length} Days)`, margin + 3, y + 6.8);
+    doc.text(
+      `PERIOD GRAND TOTAL (${filtered.length} Invoices across ${groups.length} Days)`,
+      margin + 3,
+      y + grandBoxH * 0.62
+    );
 
     const colTaxableX = margin + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w - 1.5;
     const colGstX = colTaxableX + cols[5].w;
     const colTotalX = colGstX + cols[6].w;
 
-    doc.setFontSize(8);
+    doc.setFontSize(fs(8));
     doc.text(
       totalTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       colTaxableX,
-      y + 6.8,
+      y + grandBoxH * 0.62,
       { align: 'right' }
     );
     doc.text(
       totalGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       colGstX,
-      y + 6.8,
+      y + grandBoxH * 0.62,
       { align: 'right' }
     );
-    doc.setFontSize(9);
-    doc.text(formatRs(totalGrand), colTotalX, y + 6.8, { align: 'right' });
+    doc.setFontSize(fs(9));
+    doc.text(formatRs(totalGrand), colTotalX, y + grandBoxH * 0.62, { align: 'right' });
   }
 
   // Page numbers footer
@@ -559,7 +583,7 @@ export function downloadDayBookPdf(options: DayBookReportOptions): void {
     doc.setLineWidth(0.2);
     doc.line(margin, pageH - 9, pageW - margin, pageH - 9);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(fs(7));
     doc.setTextColor(100, 116, 139);
     doc.text(`${companyName}  •  Day Book Report  •  Generated ${generatedStr}`, margin, pageH - 4.5);
     doc.text(`Page ${p} of ${totalPages}`, pageW - margin, pageH - 4.5, { align: 'right' });

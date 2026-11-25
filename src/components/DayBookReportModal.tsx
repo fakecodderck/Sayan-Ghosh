@@ -11,7 +11,7 @@ import {
   Check
 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
-import { VoucherType } from '../types/accounting';
+import { PrintTextSize, VoucherType } from '../types/accounting';
 import { formatINR } from '../utils/gstCalculations';
 import {
   DAYBOOK_CATEGORY_META,
@@ -50,6 +50,11 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
     return [];
   });
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [textSize, setTextSize] = useState<PrintTextSize>(settings.printTextSize || 'lg');
+
+  useEffect(() => {
+    setTextSize(settings.printTextSize || 'lg');
+  }, [settings.printTextSize]);
 
   useEffect(() => {
     document.body.classList.add('portal-print-active');
@@ -158,6 +163,7 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
       endDate,
       selectedCategories,
       sortOrder,
+      textSize,
     });
   };
 
@@ -211,6 +217,35 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            <div
+              className="inline-flex items-center h-8 p-0.5 bg-slate-200/80 dark:bg-slate-800 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-300 shrink-0"
+              title="Select Print & PDF Text Size"
+            >
+              <span className="px-1.5 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                Size
+              </span>
+              {(
+                [
+                  { id: 'sm', label: 'S', title: 'Small print size' },
+                  { id: 'md', label: 'M', title: 'Medium print size' },
+                  { id: 'lg', label: 'L', title: 'Large print size (Default)' },
+                  { id: 'xl', label: 'XL', title: 'Extra Large print size' },
+                ] as const
+              ).map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTextSize(opt.id)}
+                  title={opt.title}
+                  className={`h-7 px-2 rounded-md transition-all inline-flex items-center justify-center whitespace-nowrap ${
+                    textSize === opt.id ? 'bg-white dark:bg-slate-700 theme-text shadow-2xs font-bold' : ''
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             <button
               type="button"
               onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
@@ -345,7 +380,10 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
 
         {/* Printable A4 Sheet Viewport */}
         <div className="print-viewport-wrapper flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100 dark:bg-slate-950/60 flex justify-center">
-          <div className="print-only-container w-full max-w-[820px] bg-white text-slate-900 p-5 sm:p-7 shadow-sm border border-slate-300 font-sans text-xs rounded-xs h-fit">
+          <div
+            data-text-size={textSize}
+            className="print-only-container w-full max-w-[820px] bg-white text-slate-900 p-5 sm:p-7 shadow-sm border border-slate-300 font-sans rounded-xs h-fit"
+          >
             {/* Report Letterhead */}
             <div className="border-b-2 border-slate-900 pb-3 mb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
               <div>
@@ -444,13 +482,13 @@ export const DayBookReportModal: React.FC<DayBookReportModalProps> = ({
                         <table className="w-full text-left border-collapse print-table text-[10px]">
                           <thead>
                             <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase text-[9px]">
-                              <th className="py-1.5 px-2 w-28 border-r border-slate-200">Invoice No</th>
-                              <th className="py-1.5 px-2 w-24 border-r border-slate-200">Category</th>
+                              <th className="py-1.5 px-2 border-r border-slate-200 whitespace-nowrap">Invoice No</th>
+                              <th className="py-1.5 px-2 border-r border-slate-200 whitespace-nowrap">Category</th>
                               <th className="py-1.5 px-2 border-r border-slate-200">Party / Particulars</th>
-                              <th className="py-1.5 px-2 w-16 text-center border-r border-slate-200">Mode</th>
-                              <th className="py-1.5 px-2 w-20 text-right border-r border-slate-200">Taxable</th>
-                              <th className="py-1.5 px-2 w-18 text-right border-r border-slate-200">GST</th>
-                              <th className="py-1.5 px-2 w-24 text-right">Total (₹)</th>
+                              <th className="py-1.5 px-2 text-center border-r border-slate-200 whitespace-nowrap">Mode</th>
+                              <th className="py-1.5 px-2 text-right border-r border-slate-200 whitespace-nowrap">Taxable</th>
+                              <th className="py-1.5 px-2 text-right border-r border-slate-200 whitespace-nowrap">GST</th>
+                              <th className="py-1.5 px-2 text-right whitespace-nowrap">Total (₹)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
